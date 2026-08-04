@@ -1,0 +1,8 @@
+*.md
+.git
+.gitignore
+.idea
+.env
+.env.*
+*.exe
+server

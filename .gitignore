@@ -1,0 +1,107 @@
+# ============================================================
+# rd_harness 分发模板（注入业务仓库的版本）
+# 框架安装产物，业务仓库不应提交
+# ============================================================
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node
+node_modules/
+.npm
+.eslintcache
+.stylelintcache
+*.tsbuildinfo
+.nyc_output/
+coverage/
+
+# Python
+__pycache__/
+*.pyc
+
+# 环境变量
+.env
+.env.local
+.env.test
+.env.prod
+.gitlab-config
+.gitlab-config.d/
+
+# outputs
+outputs/
+
+
+# FUSE 临时文件
+.fuse_hidden*
+
+
+/.settings/
+/.project
+/.pydevproject
+
+
+# 框架目录（setup-harness.sh 安装产物；忽略所有常见 AI agent 框架目录）
+.claude/
+.codex/
+.codex-plugin/
+.codebuddy/
+.codebuddy-plugin/
+.qoder/
+.qoder-plugin/
+.trae/
+.cursor/
+.windsurf/
+.aider/
+.cline/
+.roo/
+.gemini/
+.github-copilot/
+.composer/
+.cody/
+.continue/
+.devin/
+
+# MCP 本地配置（含访问 token，禁止提交）
+.mcp.json
+
+# setup 诊断日志（含 npm 错误等运行时信息）
+.harness/.setup-*.log
+.harness/.worktrees/
+# daily-report 多仓库采集配置（collect-all.js 生成，含本机绝对路径，机器本地）
+.harness-projects
+
+# 业务仓库专有：本地框架安装状态（每个开发者各自跟踪，不跨开发者同步）
+.harness/.harness-version
+.harness/.installed-backend
+.framework-manifest
+.harness/.pending-upgrade-msg
+.harness/.framework-edit
+.harness/.push-challenge
+.harness/.push-approved
+.codegraph
+
+# ===== 业务构建产物 =====
+# Go
+*.exe
+*.exe~
+backend/server
+backend/cmd/server/server
+*.test
+# Python venv / 打包
+.venv/
+venv/
+env/
+*.egg-info/
+*.whl
+# 前端构建输出
+dist/
+build/
+.vite/
+.tmp/
+

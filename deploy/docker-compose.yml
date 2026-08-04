@@ -1,0 +1,72 @@
+# 知芽 Learnly 本地 / 单机编排
+# 使用：cp .env.example .env && docker compose up -d --build
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: learnly-postgres
+    environment:
+      POSTGRES_USER: ${LEARNLY_POSTGRES_USER:-learnly}
+      POSTGRES_PASSWORD: ${LEARNLY_POSTGRES_PASSWORD:-learnly}
+      POSTGRES_DB: ${LEARNLY_POSTGRES_DBNAME:-learnly}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${LEARNLY_POSTGRES_USER:-learnly}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: learnly-redis
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+
+  ai-service:
+    build:
+      context: ../ai-service
+    container_name: learnly-ai-service
+    env_file: .env
+    ports:
+      - "8000:8000"
+    depends_on:
+      - redis
+
+  backend:
+    build:
+      context: ../backend
+    container_name: learnly-backend
+    env_file: .env
+    environment:
+      LEARNLY_SERVER_PORT: "8080"
+      LEARNLY_SERVER_MODE: "release"
+      LEARNLY_POSTGRES_HOST: postgres
+      LEARNLY_REDIS_HOST: redis
+      LEARNLY_AI_BASEURL: http://ai-service:8000
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      ai-service:
+        condition: service_started
+
+  frontend:
+    build:
+      context: ../frontend
+    container_name: learnly-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
+  redisdata:
