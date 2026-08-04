@@ -1,0 +1,90 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Interface Changes Schema",
+  "description": "Schema for interface-changes.yaml - structured storage of backend interface changes",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "string",
+      "enum": ["1.0"],
+      "description": "Schema version"
+    },
+    "created_by": {
+      "type": "string",
+      "description": "Role that created this document (e.g., 'AI-Architect')"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp of document creation"
+    },
+    "updated_at": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "ISO 8601 timestamp of last update"
+    },
+    "interfaces": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Interface name (e.g., 'POST /api/v1/auth/login')"
+          },
+          "operation": {
+            "type": "string",
+            "enum": ["create", "read", "update", "delete"],
+            "description": "CRUD operation type"
+          },
+          "changes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": ["add_field", "remove_field", "rename_field", "response_format_change", "request_format_change"],
+                  "description": "Change type"
+                },
+                "field": {
+                  "type": ["string", "null"],
+                  "description": "Affected field name (for add/remove/rename)"
+                },
+                "from": {
+                  "type": ["string", "null"],
+                  "description": "Previous value (for format changes)"
+                },
+                "to": {
+                  "type": ["string", "null"],
+                  "description": "New value (for format changes)"
+                },
+                "description": {
+                  "type": "string",
+                  "description": "Change description"
+                }
+              },
+              "required": ["type", "description"]
+            }
+          },
+          "status": {
+            "type": "string",
+            "enum": ["proposed", "implemented", "verified"],
+            "description": "Interface status through the pipeline"
+          },
+          "verified_by": {
+            "type": ["string", "null"],
+            "description": "Role that verified this interface (required when status is 'verified')"
+          },
+          "verified_at": {
+            "type": ["string", "null"],
+            "format": "date-time",
+            "description": "Timestamp when interface was verified"
+          }
+        },
+        "required": ["name", "operation", "changes", "status"]
+      }
+    }
+  },
+  "required": ["version", "created_by", "created_at", "interfaces"]
+}

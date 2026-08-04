@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# harness — Uni-AURI 框架入口
+# 用法:
+#   ./harness setup    初始化本地环境（clone 后首次执行）
+#   ./harness status   检查框架安装状态和版本
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# 此入口会下发到目标环境；目标可能只装了单一后端目录（.claude/.codex/.codebuddy/.qoder），
+# 写死 .claude 在非 claude 环境会找不到脚本。优先 HARNESS_BACKEND 指定目录，否则探测首个含 setup 脚本的后端。
+SETUP=""
+for _d in ".${HARNESS_BACKEND:-__none__}" .claude .codex .codebuddy .qoder; do
+  if [ -f "$SCRIPT_DIR/$_d/tools/scripts/setup/setup-harness.sh" ]; then
+    SETUP="$SCRIPT_DIR/$_d/tools/scripts/setup/setup-harness.sh"
+    break
+  fi
+done
+if [ -z "$SETUP" ]; then
+  echo "harness: 未找到 setup 脚本（已查 .claude/.codex/.codebuddy/.qoder 下 tools/scripts/setup/setup-harness.sh）" >&2
+  echo "  可设置 HARNESS_BACKEND=claude|codex|codebuddy|qoder 指定后端" >&2
+  exit 1
+fi
+
+case "${1:-}" in
+  setup)
+    bash "$SETUP"
+    ;;
+  status)
+    bash "$SETUP" --check
+    ;;
+  *)
+    echo "用法: ./harness {setup|status}"
+    echo ""
+    echo "  setup    初始化本地开发环境（git clone 后首次执行）"
+    echo "  status   检查框架安装状态和版本"
+    exit 1
+    ;;
+esac

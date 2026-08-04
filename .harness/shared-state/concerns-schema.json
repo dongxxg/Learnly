@@ -1,0 +1,91 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Concerns Schema",
+  "description": "Schema for concerns.json - structured storage of Reviewer P0/P1 issues",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "string",
+      "enum": ["1.0"],
+      "description": "Schema version"
+    },
+    "reviewer": {
+      "type": "string",
+      "description": "Reviewer role identifier (e.g., 'AI-Reviewer')"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp of concerns creation"
+    },
+    "concerns": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^C[0-9]+$",
+            "description": "Unique concern identifier (e.g., 'C001')"
+          },
+          "severity": {
+            "type": "string",
+            "enum": ["P0", "P1"],
+            "description": "Issue severity"
+          },
+          "file": {
+            "type": "string",
+            "description": "File path (relative to project root)"
+          },
+          "line": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Line number (0-based)"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["correctness", "observational", "security", "performance"],
+            "description": "Issue type category"
+          },
+          "description": {
+            "type": "string",
+            "description": "Detailed issue description"
+          },
+          "author": {
+            "type": ["string", "null"],
+            "description": "Git username of the concern author (issue !157+!159). Used by daily-report collect-ai.js to filter concerns by --user. Legacy data may omit this field."
+          },
+          "status": {
+            "type": "string",
+            "enum": ["open", "resolved", "deferred"],
+            "description": "Issue status"
+          },
+          "resolved_by": {
+            "type": ["string", "null"],
+            "description": "Role that resolved the concern (e.g., 'AI-Developer')"
+          },
+          "resolved_at": {
+            "type": ["string", "null"],
+            "format": "date-time",
+            "description": "Timestamp when concern was resolved"
+          },
+          "deferred_reason": {
+            "type": ["string", "null"],
+            "description": "Reason for deferring (required if status is 'deferred')"
+          },
+          "deferred_by": {
+            "type": ["string", "null"],
+            "description": "Role that deferred the concern"
+          },
+          "deferred_at": {
+            "type": ["string", "null"],
+            "format": "date-time",
+            "description": "Timestamp when concern was deferred"
+          }
+        },
+        "required": ["id", "severity", "file", "type", "description", "status"]
+      }
+    }
+  },
+  "required": ["version", "reviewer", "timestamp", "concerns"]
+}
