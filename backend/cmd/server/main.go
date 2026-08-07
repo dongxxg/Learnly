@@ -14,6 +14,7 @@ import (
 	"learnly/backend/internal/config"
 	"learnly/backend/internal/handler"
 	"learnly/backend/internal/router"
+	"learnly/backend/seeds"
 	"learnly/backend/internal/store"
 )
 
@@ -27,6 +28,19 @@ func main() {
 
 	db := store.NewPostgres(cfg.Postgres)
 	rdb := store.NewRedis(cfg.Redis)
+
+	// 自动迁移：失败阻塞启动。
+	if err := store.AutoMigrate(db); err != nil {
+		log.Fatalf("migration failed: %v", err)
+	}
+
+	// 加载 seed 数据：失败阻塞启动。
+	seedResult, err := seeds.LoadCharacters(db, "")
+	if err != nil {
+		log.Fatalf("seed characters failed: %v", err)
+	}
+	log.Printf("[seed] characters: inserted=%d, skipped=%d, total=%d",
+		seedResult.Inserted, seedResult.Skipped, seedResult.Total)
 
 	deps := handler.Deps{DB: db, Redis: rdb}
 	engine := router.New(deps)

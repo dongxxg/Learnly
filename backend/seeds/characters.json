@@ -1,0 +1,1892 @@
+[
+    {
+      "char": "一",
+      "pinyin": "yī",
+      "strokes": 1,
+      "level": 1,
+      "definition": "数字一；全、满"
+    },
+    {
+      "char": "二",
+      "pinyin": "èr",
+      "strokes": 2,
+      "level": 1,
+      "definition": "数字二"
+    },
+    {
+      "char": "三",
+      "pinyin": "sān",
+      "strokes": 3,
+      "level": 1,
+      "definition": "数字三"
+    },
+    {
+      "char": "四",
+      "pinyin": "sì",
+      "strokes": 5,
+      "level": 1,
+      "definition": "数字四"
+    },
+    {
+      "char": "五",
+      "pinyin": "wǔ",
+      "strokes": 4,
+      "level": 1,
+      "definition": "数字五"
+    },
+    {
+      "char": "六",
+      "pinyin": "liù",
+      "strokes": 4,
+      "level": 1,
+      "definition": "数字六"
+    },
+    {
+      "char": "七",
+      "pinyin": "qī",
+      "strokes": 2,
+      "level": 1,
+      "definition": "数字七"
+    },
+    {
+      "char": "八",
+      "pinyin": "bā",
+      "strokes": 2,
+      "level": 1,
+      "definition": "数字八"
+    },
+    {
+      "char": "九",
+      "pinyin": "jiǔ",
+      "strokes": 2,
+      "level": 1,
+      "definition": "数字九"
+    },
+    {
+      "char": "十",
+      "pinyin": "shí",
+      "strokes": 2,
+      "level": 1,
+      "definition": "数字十；完备"
+    },
+    {
+      "char": "人",
+      "pinyin": "rén",
+      "strokes": 2,
+      "level": 1,
+      "definition": "人类；别人"
+    },
+    {
+      "char": "口",
+      "pinyin": "kǒu",
+      "strokes": 3,
+      "level": 1,
+      "definition": "嘴巴；出入口"
+    },
+    {
+      "char": "目",
+      "pinyin": "mù",
+      "strokes": 5,
+      "level": 1,
+      "definition": "眼睛；看"
+    },
+    {
+      "char": "耳",
+      "pinyin": "ěr",
+      "strokes": 6,
+      "level": 1,
+      "definition": "耳朵；听"
+    },
+    {
+      "char": "手",
+      "pinyin": "shǒu",
+      "strokes": 4,
+      "level": 1,
+      "definition": "手；技能"
+    },
+    {
+      "char": "足",
+      "pinyin": "zú",
+      "strokes": 7,
+      "level": 1,
+      "definition": "脚；充足"
+    },
+    {
+      "char": "日",
+      "pinyin": "rì",
+      "strokes": 4,
+      "level": 1,
+      "definition": "太阳；白天"
+    },
+    {
+      "char": "月",
+      "pinyin": "yuè",
+      "strokes": 4,
+      "level": 1,
+      "definition": "月亮；月份"
+    },
+    {
+      "char": "山",
+      "pinyin": "shān",
+      "strokes": 3,
+      "level": 1,
+      "definition": "山岭"
+    },
+    {
+      "char": "石",
+      "pinyin": "shí",
+      "strokes": 5,
+      "level": 1,
+      "definition": "石头"
+    },
+    {
+      "char": "田",
+      "pinyin": "tián",
+      "strokes": 5,
+      "level": 1,
+      "definition": "农田"
+    },
+    {
+      "char": "土",
+      "pinyin": "tǔ",
+      "strokes": 3,
+      "level": 1,
+      "definition": "泥土；土地"
+    },
+    {
+      "char": "水",
+      "pinyin": "shuǐ",
+      "strokes": 4,
+      "level": 1,
+      "definition": "水"
+    },
+    {
+      "char": "火",
+      "pinyin": "huǒ",
+      "strokes": 4,
+      "level": 1,
+      "definition": "火"
+    },
+    {
+      "char": "木",
+      "pinyin": "mù",
+      "strokes": 4,
+      "level": 1,
+      "definition": "树木；木头"
+    },
+    {
+      "char": "天",
+      "pinyin": "tiān",
+      "strokes": 4,
+      "level": 1,
+      "definition": "天空"
+    },
+    {
+      "char": "上",
+      "pinyin": "shàng",
+      "strokes": 3,
+      "level": 1,
+      "definition": "上面；向上"
+    },
+    {
+      "char": "下",
+      "pinyin": "xià",
+      "strokes": 3,
+      "level": 1,
+      "definition": "下面；向下"
+    },
+    {
+      "char": "左",
+      "pinyin": "zuǒ",
+      "strokes": 5,
+      "level": 1,
+      "definition": "左边"
+    },
+    {
+      "char": "右",
+      "pinyin": "yòu",
+      "strokes": 5,
+      "level": 1,
+      "definition": "右边"
+    },
+    {
+      "char": "中",
+      "pinyin": "zhōng",
+      "strokes": 4,
+      "level": 1,
+      "definition": "中间；当中"
+    },
+    {
+      "char": "大",
+      "pinyin": "dà",
+      "strokes": 3,
+      "level": 1,
+      "definition": "大"
+    },
+    {
+      "char": "小",
+      "pinyin": "xiǎo",
+      "strokes": 3,
+      "level": 1,
+      "definition": "小"
+    },
+    {
+      "char": "多",
+      "pinyin": "duō",
+      "strokes": 6,
+      "level": 1,
+      "definition": "数量多"
+    },
+    {
+      "char": "少",
+      "pinyin": "shǎo",
+      "strokes": 4,
+      "level": 1,
+      "definition": "数量少"
+    },
+    {
+      "char": "长",
+      "pinyin": "cháng",
+      "strokes": 4,
+      "level": 1,
+      "definition": "长度长；生长"
+    },
+    {
+      "char": "短",
+      "pinyin": "duǎn",
+      "strokes": 12,
+      "level": 2,
+      "definition": "短"
+    },
+    {
+      "char": "高",
+      "pinyin": "gāo",
+      "strokes": 10,
+      "level": 1,
+      "definition": "高"
+    },
+    {
+      "char": "低",
+      "pinyin": "dī",
+      "strokes": 7,
+      "level": 1,
+      "definition": "低"
+    },
+    {
+      "char": "前",
+      "pinyin": "qián",
+      "strokes": 9,
+      "level": 1,
+      "definition": "前面"
+    },
+    {
+      "char": "后",
+      "pinyin": "hòu",
+      "strokes": 6,
+      "level": 1,
+      "definition": "后面"
+    },
+    {
+      "char": "里",
+      "pinyin": "lǐ",
+      "strokes": 7,
+      "level": 1,
+      "definition": "里面"
+    },
+    {
+      "char": "外",
+      "pinyin": "wài",
+      "strokes": 5,
+      "level": 1,
+      "definition": "外面"
+    },
+    {
+      "char": "东",
+      "pinyin": "dōng",
+      "strokes": 5,
+      "level": 1,
+      "definition": "东方"
+    },
+    {
+      "char": "西",
+      "pinyin": "xī",
+      "strokes": 6,
+      "level": 1,
+      "definition": "西方"
+    },
+    {
+      "char": "南",
+      "pinyin": "nán",
+      "strokes": 9,
+      "level": 1,
+      "definition": "南方"
+    },
+    {
+      "char": "北",
+      "pinyin": "běi",
+      "strokes": 5,
+      "level": 1,
+      "definition": "北方"
+    },
+    {
+      "char": "早",
+      "pinyin": "zǎo",
+      "strokes": 6,
+      "level": 1,
+      "definition": "早晨"
+    },
+    {
+      "char": "晚",
+      "pinyin": "wǎn",
+      "strokes": 11,
+      "level": 1,
+      "definition": "晚上"
+    },
+    {
+      "char": "红",
+      "pinyin": "hóng",
+      "strokes": 6,
+      "level": 1,
+      "definition": "红色"
+    },
+    {
+      "char": "黄",
+      "pinyin": "huáng",
+      "strokes": 11,
+      "level": 1,
+      "definition": "黄色"
+    },
+    {
+      "char": "蓝",
+      "pinyin": "lán",
+      "strokes": 13,
+      "level": 2,
+      "definition": "蓝色"
+    },
+    {
+      "char": "白",
+      "pinyin": "bái",
+      "strokes": 5,
+      "level": 1,
+      "definition": "白色"
+    },
+    {
+      "char": "黑",
+      "pinyin": "hēi",
+      "strokes": 12,
+      "level": 2,
+      "definition": "黑色"
+    },
+    {
+      "char": "绿",
+      "pinyin": "lǜ",
+      "strokes": 11,
+      "level": 2,
+      "definition": "绿色"
+    },
+    {
+      "char": "花",
+      "pinyin": "huā",
+      "strokes": 7,
+      "level": 1,
+      "definition": "花朵"
+    },
+    {
+      "char": "草",
+      "pinyin": "cǎo",
+      "strokes": 9,
+      "level": 1,
+      "definition": "草"
+    },
+    {
+      "char": "树",
+      "pinyin": "shù",
+      "strokes": 9,
+      "level": 1,
+      "definition": "树木"
+    },
+    {
+      "char": "叶",
+      "pinyin": "yè",
+      "strokes": 5,
+      "level": 1,
+      "definition": "叶子"
+    },
+    {
+      "char": "果",
+      "pinyin": "guǒ",
+      "strokes": 8,
+      "level": 1,
+      "definition": "果实"
+    },
+    {
+      "char": "瓜",
+      "pinyin": "guā",
+      "strokes": 5,
+      "level": 1,
+      "definition": "瓜类"
+    },
+    {
+      "char": "豆",
+      "pinyin": "dòu",
+      "strokes": 7,
+      "level": 1,
+      "definition": "豆子"
+    },
+    {
+      "char": "米",
+      "pinyin": "mǐ",
+      "strokes": 6,
+      "level": 1,
+      "definition": "大米"
+    },
+    {
+      "char": "面",
+      "pinyin": "miàn",
+      "strokes": 9,
+      "level": 1,
+      "definition": "面条；脸面"
+    },
+    {
+      "char": "饭",
+      "pinyin": "fàn",
+      "strokes": 7,
+      "level": 1,
+      "definition": "米饭"
+    },
+    {
+      "char": "鱼",
+      "pinyin": "yú",
+      "strokes": 8,
+      "level": 1,
+      "definition": "鱼"
+    },
+    {
+      "char": "鸟",
+      "pinyin": "niǎo",
+      "strokes": 5,
+      "level": 1,
+      "definition": "鸟"
+    },
+    {
+      "char": "马",
+      "pinyin": "mǎ",
+      "strokes": 3,
+      "level": 1,
+      "definition": "马"
+    },
+    {
+      "char": "牛",
+      "pinyin": "niú",
+      "strokes": 4,
+      "level": 1,
+      "definition": "牛"
+    },
+    {
+      "char": "羊",
+      "pinyin": "yáng",
+      "strokes": 6,
+      "level": 1,
+      "definition": "羊"
+    },
+    {
+      "char": "狗",
+      "pinyin": "gǒu",
+      "strokes": 8,
+      "level": 1,
+      "definition": "狗"
+    },
+    {
+      "char": "猫",
+      "pinyin": "māo",
+      "strokes": 11,
+      "level": 1,
+      "definition": "猫"
+    },
+    {
+      "char": "兔",
+      "pinyin": "tù",
+      "strokes": 8,
+      "level": 1,
+      "definition": "兔子"
+    },
+    {
+      "char": "龙",
+      "pinyin": "lóng",
+      "strokes": 5,
+      "level": 2,
+      "definition": "龙"
+    },
+    {
+      "char": "虫",
+      "pinyin": "chóng",
+      "strokes": 6,
+      "level": 1,
+      "definition": "虫子"
+    },
+    {
+      "char": "云",
+      "pinyin": "yún",
+      "strokes": 4,
+      "level": 1,
+      "definition": "云朵"
+    },
+    {
+      "char": "雨",
+      "pinyin": "yǔ",
+      "strokes": 8,
+      "level": 1,
+      "definition": "雨"
+    },
+    {
+      "char": "雪",
+      "pinyin": "xuě",
+      "strokes": 11,
+      "level": 2,
+      "definition": "雪"
+    },
+    {
+      "char": "风",
+      "pinyin": "fēng",
+      "strokes": 4,
+      "level": 1,
+      "definition": "风"
+    },
+    {
+      "char": "电",
+      "pinyin": "diàn",
+      "strokes": 5,
+      "level": 1,
+      "definition": "电"
+    },
+    {
+      "char": "星",
+      "pinyin": "xīng",
+      "strokes": 9,
+      "level": 1,
+      "definition": "星星"
+    },
+    {
+      "char": "光",
+      "pinyin": "guāng",
+      "strokes": 6,
+      "level": 1,
+      "definition": "光；光线"
+    },
+    {
+      "char": "气",
+      "pinyin": "qì",
+      "strokes": 4,
+      "level": 1,
+      "definition": "空气；气息"
+    },
+    {
+      "char": "父",
+      "pinyin": "fù",
+      "strokes": 4,
+      "level": 1,
+      "definition": "父亲"
+    },
+    {
+      "char": "母",
+      "pinyin": "mǔ",
+      "strokes": 5,
+      "level": 1,
+      "definition": "母亲"
+    },
+    {
+      "char": "爸",
+      "pinyin": "bà",
+      "strokes": 8,
+      "level": 1,
+      "definition": "爸爸"
+    },
+    {
+      "char": "妈",
+      "pinyin": "mā",
+      "strokes": 6,
+      "level": 1,
+      "definition": "妈妈"
+    },
+    {
+      "char": "爷",
+      "pinyin": "yé",
+      "strokes": 6,
+      "level": 1,
+      "definition": "爷爷"
+    },
+    {
+      "char": "奶",
+      "pinyin": "nǎi",
+      "strokes": 5,
+      "level": 1,
+      "definition": "奶奶；牛奶"
+    },
+    {
+      "char": "哥",
+      "pinyin": "gē",
+      "strokes": 10,
+      "level": 1,
+      "definition": "哥哥"
+    },
+    {
+      "char": "姐",
+      "pinyin": "jiě",
+      "strokes": 8,
+      "level": 1,
+      "definition": "姐姐"
+    },
+    {
+      "char": "弟",
+      "pinyin": "dì",
+      "strokes": 7,
+      "level": 1,
+      "definition": "弟弟"
+    },
+    {
+      "char": "妹",
+      "pinyin": "mèi",
+      "strokes": 8,
+      "level": 1,
+      "definition": "妹妹"
+    },
+    {
+      "char": "我",
+      "pinyin": "wǒ",
+      "strokes": 7,
+      "level": 1,
+      "definition": "自己"
+    },
+    {
+      "char": "你",
+      "pinyin": "nǐ",
+      "strokes": 7,
+      "level": 1,
+      "definition": "你"
+    },
+    {
+      "char": "他",
+      "pinyin": "tā",
+      "strokes": 5,
+      "level": 1,
+      "definition": "他"
+    },
+    {
+      "char": "她",
+      "pinyin": "tā",
+      "strokes": 6,
+      "level": 1,
+      "definition": "她"
+    },
+    {
+      "char": "们",
+      "pinyin": "men",
+      "strokes": 5,
+      "level": 1,
+      "definition": "们（复数）"
+    },
+    {
+      "char": "好",
+      "pinyin": "hǎo",
+      "strokes": 6,
+      "level": 1,
+      "definition": "好"
+    },
+    {
+      "char": "坏",
+      "pinyin": "huài",
+      "strokes": 7,
+      "level": 1,
+      "definition": "坏"
+    },
+    {
+      "char": "新",
+      "pinyin": "xīn",
+      "strokes": 13,
+      "level": 1,
+      "definition": "新"
+    },
+    {
+      "char": "旧",
+      "pinyin": "jiù",
+      "strokes": 5,
+      "level": 1,
+      "definition": "旧"
+    },
+    {
+      "char": "爱",
+      "pinyin": "ài",
+      "strokes": 10,
+      "level": 1,
+      "definition": "爱"
+    },
+    {
+      "char": "心",
+      "pinyin": "xīn",
+      "strokes": 4,
+      "level": 1,
+      "definition": "心脏；心"
+    },
+    {
+      "char": "头",
+      "pinyin": "tóu",
+      "strokes": 5,
+      "level": 1,
+      "definition": "头"
+    },
+    {
+      "char": "发",
+      "pinyin": "fà",
+      "strokes": 5,
+      "level": 1,
+      "definition": "头发"
+    },
+    {
+      "char": "脸",
+      "pinyin": "liǎn",
+      "strokes": 11,
+      "level": 2,
+      "definition": "脸"
+    },
+    {
+      "char": "身",
+      "pinyin": "shēn",
+      "strokes": 7,
+      "level": 1,
+      "definition": "身体"
+    },
+    {
+      "char": "体",
+      "pinyin": "tǐ",
+      "strokes": 7,
+      "level": 1,
+      "definition": "身体"
+    },
+    {
+      "char": "皮",
+      "pinyin": "pí",
+      "strokes": 5,
+      "level": 1,
+      "definition": "皮肤"
+    },
+    {
+      "char": "毛",
+      "pinyin": "máo",
+      "strokes": 4,
+      "level": 1,
+      "definition": "毛发"
+    },
+    {
+      "char": "衣",
+      "pinyin": "yī",
+      "strokes": 6,
+      "level": 1,
+      "definition": "衣服"
+    },
+    {
+      "char": "鞋",
+      "pinyin": "xié",
+      "strokes": 15,
+      "level": 2,
+      "definition": "鞋子"
+    },
+    {
+      "char": "帽",
+      "pinyin": "mào",
+      "strokes": 12,
+      "level": 2,
+      "definition": "帽子"
+    },
+    {
+      "char": "书",
+      "pinyin": "shū",
+      "strokes": 4,
+      "level": 1,
+      "definition": "书"
+    },
+    {
+      "char": "本",
+      "pinyin": "běn",
+      "strokes": 5,
+      "level": 1,
+      "definition": "本子"
+    },
+    {
+      "char": "笔",
+      "pinyin": "bǐ",
+      "strokes": 10,
+      "level": 1,
+      "definition": "笔"
+    },
+    {
+      "char": "纸",
+      "pinyin": "zhǐ",
+      "strokes": 7,
+      "level": 1,
+      "definition": "纸"
+    },
+    {
+      "char": "字",
+      "pinyin": "zì",
+      "strokes": 6,
+      "level": 1,
+      "definition": "文字"
+    },
+    {
+      "char": "画",
+      "pinyin": "huà",
+      "strokes": 8,
+      "level": 1,
+      "definition": "画"
+    },
+    {
+      "char": "图",
+      "pinyin": "tú",
+      "strokes": 8,
+      "level": 1,
+      "definition": "图画"
+    },
+    {
+      "char": "课",
+      "pinyin": "kè",
+      "strokes": 10,
+      "level": 1,
+      "definition": "课程"
+    },
+    {
+      "char": "题",
+      "pinyin": "tí",
+      "strokes": 15,
+      "level": 2,
+      "definition": "题目"
+    },
+    {
+      "char": "数",
+      "pinyin": "shù",
+      "strokes": 13,
+      "level": 2,
+      "definition": "数字；数目"
+    },
+    {
+      "char": "学",
+      "pinyin": "xué",
+      "strokes": 8,
+      "level": 1,
+      "definition": "学习"
+    },
+    {
+      "char": "校",
+      "pinyin": "xiào",
+      "strokes": 10,
+      "level": 1,
+      "definition": "学校"
+    },
+    {
+      "char": "师",
+      "pinyin": "shī",
+      "strokes": 6,
+      "level": 1,
+      "definition": "老师"
+    },
+    {
+      "char": "生",
+      "pinyin": "shēng",
+      "strokes": 5,
+      "level": 1,
+      "definition": "学生；生活"
+    },
+    {
+      "char": "同",
+      "pinyin": "tóng",
+      "strokes": 6,
+      "level": 1,
+      "definition": "同学；相同"
+    },
+    {
+      "char": "友",
+      "pinyin": "yǒu",
+      "strokes": 4,
+      "level": 1,
+      "definition": "朋友"
+    },
+    {
+      "char": "家",
+      "pinyin": "jiā",
+      "strokes": 10,
+      "level": 1,
+      "definition": "家"
+    },
+    {
+      "char": "房",
+      "pinyin": "fáng",
+      "strokes": 8,
+      "level": 1,
+      "definition": "房间"
+    },
+    {
+      "char": "屋",
+      "pinyin": "wū",
+      "strokes": 9,
+      "level": 1,
+      "definition": "屋子"
+    },
+    {
+      "char": "门",
+      "pinyin": "mén",
+      "strokes": 3,
+      "level": 1,
+      "definition": "门"
+    },
+    {
+      "char": "窗",
+      "pinyin": "chuāng",
+      "strokes": 12,
+      "level": 2,
+      "definition": "窗户"
+    },
+    {
+      "char": "桌",
+      "pinyin": "zhuō",
+      "strokes": 10,
+      "level": 1,
+      "definition": "桌子"
+    },
+    {
+      "char": "椅",
+      "pinyin": "yǐ",
+      "strokes": 12,
+      "level": 2,
+      "definition": "椅子"
+    },
+    {
+      "char": "床",
+      "pinyin": "chuáng",
+      "strokes": 7,
+      "level": 1,
+      "definition": "床"
+    },
+    {
+      "char": "灯",
+      "pinyin": "dēng",
+      "strokes": 6,
+      "level": 1,
+      "definition": "灯"
+    },
+    {
+      "char": "车",
+      "pinyin": "chē",
+      "strokes": 4,
+      "level": 1,
+      "definition": "车"
+    },
+    {
+      "char": "船",
+      "pinyin": "chuán",
+      "strokes": 11,
+      "level": 2,
+      "definition": "船"
+    },
+    {
+      "char": "飞",
+      "pinyin": "fēi",
+      "strokes": 3,
+      "level": 1,
+      "definition": "飞"
+    },
+    {
+      "char": "机",
+      "pinyin": "jī",
+      "strokes": 6,
+      "level": 1,
+      "definition": "飞机；机器"
+    },
+    {
+      "char": "路",
+      "pinyin": "lù",
+      "strokes": 13,
+      "level": 2,
+      "definition": "路"
+    },
+    {
+      "char": "桥",
+      "pinyin": "qiáo",
+      "strokes": 10,
+      "level": 2,
+      "definition": "桥"
+    },
+    {
+      "char": "伞",
+      "pinyin": "sǎn",
+      "strokes": 6,
+      "level": 1,
+      "definition": "伞"
+    },
+    {
+      "char": "钱",
+      "pinyin": "qián",
+      "strokes": 10,
+      "level": 2,
+      "definition": "钱"
+    },
+    {
+      "char": "店",
+      "pinyin": "diàn",
+      "strokes": 8,
+      "level": 1,
+      "definition": "商店"
+    },
+    {
+      "char": "市",
+      "pinyin": "shì",
+      "strokes": 5,
+      "level": 1,
+      "definition": "城市；市场"
+    },
+    {
+      "char": "村",
+      "pinyin": "cūn",
+      "strokes": 7,
+      "level": 1,
+      "definition": "村庄"
+    },
+    {
+      "char": "国",
+      "pinyin": "guó",
+      "strokes": 8,
+      "level": 1,
+      "definition": "国家"
+    },
+    {
+      "char": "省",
+      "pinyin": "shěng",
+      "strokes": 9,
+      "level": 2,
+      "definition": "省份"
+    },
+    {
+      "char": "看",
+      "pinyin": "kàn",
+      "strokes": 9,
+      "level": 1,
+      "definition": "看"
+    },
+    {
+      "char": "听",
+      "pinyin": "tīng",
+      "strokes": 7,
+      "level": 1,
+      "definition": "听"
+    },
+    {
+      "char": "说",
+      "pinyin": "shuō",
+      "strokes": 9,
+      "level": 1,
+      "definition": "说话"
+    },
+    {
+      "char": "读",
+      "pinyin": "dú",
+      "strokes": 10,
+      "level": 1,
+      "definition": "读"
+    },
+    {
+      "char": "写",
+      "pinyin": "xiě",
+      "strokes": 5,
+      "level": 1,
+      "definition": "写"
+    },
+    {
+      "char": "想",
+      "pinyin": "xiǎng",
+      "strokes": 13,
+      "level": 2,
+      "definition": "想"
+    },
+    {
+      "char": "知",
+      "pinyin": "zhī",
+      "strokes": 8,
+      "level": 1,
+      "definition": "知道"
+    },
+    {
+      "char": "觉",
+      "pinyin": "jué",
+      "strokes": 9,
+      "level": 1,
+      "definition": "觉得；感觉"
+    },
+    {
+      "char": "记",
+      "pinyin": "jì",
+      "strokes": 5,
+      "level": 1,
+      "definition": "记住"
+    },
+    {
+      "char": "忘",
+      "pinyin": "wàng",
+      "strokes": 7,
+      "level": 1,
+      "definition": "忘记"
+    },
+    {
+      "char": "笑",
+      "pinyin": "xiào",
+      "strokes": 10,
+      "level": 1,
+      "definition": "笑"
+    },
+    {
+      "char": "哭",
+      "pinyin": "kū",
+      "strokes": 10,
+      "level": 1,
+      "definition": "哭"
+    },
+    {
+      "char": "怒",
+      "pinyin": "nù",
+      "strokes": 9,
+      "level": 2,
+      "definition": "生气"
+    },
+    {
+      "char": "怕",
+      "pinyin": "pà",
+      "strokes": 8,
+      "level": 1,
+      "definition": "害怕"
+    },
+    {
+      "char": "乐",
+      "pinyin": "lè",
+      "strokes": 5,
+      "level": 1,
+      "definition": "快乐"
+    },
+    {
+      "char": "忙",
+      "pinyin": "máng",
+      "strokes": 6,
+      "level": 1,
+      "definition": "忙碌"
+    },
+    {
+      "char": "闲",
+      "pinyin": "xián",
+      "strokes": 7,
+      "level": 1,
+      "definition": "空闲"
+    },
+    {
+      "char": "睡",
+      "pinyin": "shuì",
+      "strokes": 13,
+      "level": 2,
+      "definition": "睡觉"
+    },
+    {
+      "char": "吃",
+      "pinyin": "chī",
+      "strokes": 6,
+      "level": 1,
+      "definition": "吃"
+    },
+    {
+      "char": "喝",
+      "pinyin": "hē",
+      "strokes": 12,
+      "level": 2,
+      "definition": "喝"
+    },
+    {
+      "char": "穿",
+      "pinyin": "chuān",
+      "strokes": 9,
+      "level": 1,
+      "definition": "穿"
+    },
+    {
+      "char": "走",
+      "pinyin": "zǒu",
+      "strokes": 7,
+      "level": 1,
+      "definition": "走"
+    },
+    {
+      "char": "跑",
+      "pinyin": "pǎo",
+      "strokes": 12,
+      "level": 2,
+      "definition": "跑"
+    },
+    {
+      "char": "站",
+      "pinyin": "zhàn",
+      "strokes": 10,
+      "level": 1,
+      "definition": "站"
+    },
+    {
+      "char": "坐",
+      "pinyin": "zuò",
+      "strokes": 7,
+      "level": 1,
+      "definition": "坐"
+    },
+    {
+      "char": "开",
+      "pinyin": "kāi",
+      "strokes": 4,
+      "level": 1,
+      "definition": "打开"
+    },
+    {
+      "char": "关",
+      "pinyin": "guān",
+      "strokes": 6,
+      "level": 1,
+      "definition": "关闭"
+    },
+    {
+      "char": "给",
+      "pinyin": "gěi",
+      "strokes": 9,
+      "level": 1,
+      "definition": "给"
+    },
+    {
+      "char": "拿",
+      "pinyin": "ná",
+      "strokes": 10,
+      "level": 1,
+      "definition": "拿"
+    },
+    {
+      "char": "放",
+      "pinyin": "fàng",
+      "strokes": 8,
+      "level": 1,
+      "definition": "放"
+    },
+    {
+      "char": "来",
+      "pinyin": "lái",
+      "strokes": 7,
+      "level": 1,
+      "definition": "来"
+    },
+    {
+      "char": "去",
+      "pinyin": "qù",
+      "strokes": 5,
+      "level": 1,
+      "definition": "去"
+    },
+    {
+      "char": "回",
+      "pinyin": "huí",
+      "strokes": 6,
+      "level": 1,
+      "definition": "回来"
+    },
+    {
+      "char": "到",
+      "pinyin": "dào",
+      "strokes": 8,
+      "level": 1,
+      "definition": "到达"
+    },
+    {
+      "char": "过",
+      "pinyin": "guò",
+      "strokes": 6,
+      "level": 1,
+      "definition": "经过；过去"
+    },
+    {
+      "char": "进",
+      "pinyin": "jìn",
+      "strokes": 7,
+      "level": 1,
+      "definition": "进来"
+    },
+    {
+      "char": "出",
+      "pinyin": "chū",
+      "strokes": 5,
+      "level": 1,
+      "definition": "出去"
+    },
+    {
+      "char": "起",
+      "pinyin": "qǐ",
+      "strokes": 10,
+      "level": 1,
+      "definition": "起来"
+    },
+    {
+      "char": "快",
+      "pinyin": "kuài",
+      "strokes": 7,
+      "level": 1,
+      "definition": "快"
+    },
+    {
+      "char": "慢",
+      "pinyin": "màn",
+      "strokes": 14,
+      "level": 2,
+      "definition": "慢"
+    },
+    {
+      "char": "远",
+      "pinyin": "yuǎn",
+      "strokes": 7,
+      "level": 1,
+      "definition": "远"
+    },
+    {
+      "char": "近",
+      "pinyin": "jìn",
+      "strokes": 7,
+      "level": 1,
+      "definition": "近"
+    },
+    {
+      "char": "清",
+      "pinyin": "qīng",
+      "strokes": 11,
+      "level": 2,
+      "definition": "清澈；清楚"
+    },
+    {
+      "char": "浊",
+      "pinyin": "zhuó",
+      "strokes": 9,
+      "level": 3,
+      "definition": "浑浊"
+    },
+    {
+      "char": "香",
+      "pinyin": "xiāng",
+      "strokes": 9,
+      "level": 2,
+      "definition": "香"
+    },
+    {
+      "char": "臭",
+      "pinyin": "chòu",
+      "strokes": 10,
+      "level": 2,
+      "definition": "臭"
+    },
+    {
+      "char": "甜",
+      "pinyin": "tián",
+      "strokes": 11,
+      "level": 2,
+      "definition": "甜"
+    },
+    {
+      "char": "苦",
+      "pinyin": "kǔ",
+      "strokes": 8,
+      "level": 2,
+      "definition": "苦"
+    },
+    {
+      "char": "酸",
+      "pinyin": "suān",
+      "strokes": 14,
+      "level": 2,
+      "definition": "酸"
+    },
+    {
+      "char": "辣",
+      "pinyin": "là",
+      "strokes": 14,
+      "level": 2,
+      "definition": "辣"
+    },
+    {
+      "char": "咸",
+      "pinyin": "xián",
+      "strokes": 9,
+      "level": 3,
+      "definition": "咸"
+    },
+    {
+      "char": "冷",
+      "pinyin": "lěng",
+      "strokes": 7,
+      "level": 1,
+      "definition": "冷"
+    },
+    {
+      "char": "热",
+      "pinyin": "rè",
+      "strokes": 10,
+      "level": 1,
+      "definition": "热"
+    },
+    {
+      "char": "温",
+      "pinyin": "wēn",
+      "strokes": 12,
+      "level": 2,
+      "definition": "温暖"
+    },
+    {
+      "char": "凉",
+      "pinyin": "liáng",
+      "strokes": 10,
+      "level": 2,
+      "definition": "凉"
+    },
+    {
+      "char": "春",
+      "pinyin": "chūn",
+      "strokes": 9,
+      "level": 1,
+      "definition": "春天"
+    },
+    {
+      "char": "夏",
+      "pinyin": "xià",
+      "strokes": 10,
+      "level": 1,
+      "definition": "夏天"
+    },
+    {
+      "char": "秋",
+      "pinyin": "qiū",
+      "strokes": 9,
+      "level": 1,
+      "definition": "秋天"
+    },
+    {
+      "char": "冬",
+      "pinyin": "dōng",
+      "strokes": 5,
+      "level": 1,
+      "definition": "冬天"
+    },
+    {
+      "char": "年",
+      "pinyin": "nián",
+      "strokes": 6,
+      "level": 1,
+      "definition": "年"
+    },
+    {
+      "char": "岁",
+      "pinyin": "suì",
+      "strokes": 6,
+      "level": 1,
+      "definition": "岁"
+    },
+    {
+      "char": "时",
+      "pinyin": "shí",
+      "strokes": 7,
+      "level": 1,
+      "definition": "时间"
+    },
+    {
+      "char": "分",
+      "pinyin": "fēn",
+      "strokes": 4,
+      "level": 1,
+      "definition": "分钟；分开"
+    },
+    {
+      "char": "秒",
+      "pinyin": "miǎo",
+      "strokes": 9,
+      "level": 2,
+      "definition": "秒"
+    },
+    {
+      "char": "今",
+      "pinyin": "jīn",
+      "strokes": 4,
+      "level": 1,
+      "definition": "今天"
+    },
+    {
+      "char": "昨",
+      "pinyin": "zuó",
+      "strokes": 9,
+      "level": 1,
+      "definition": "昨天"
+    },
+    {
+      "char": "明",
+      "pinyin": "míng",
+      "strokes": 8,
+      "level": 1,
+      "definition": "明天"
+    },
+    {
+      "char": "个",
+      "pinyin": "gè",
+      "strokes": 3,
+      "level": 1,
+      "definition": "量词"
+    },
+    {
+      "char": "只",
+      "pinyin": "zhī",
+      "strokes": 5,
+      "level": 1,
+      "definition": "量词；只有"
+    },
+    {
+      "char": "条",
+      "pinyin": "tiáo",
+      "strokes": 7,
+      "level": 1,
+      "definition": "量词"
+    },
+    {
+      "char": "片",
+      "pinyin": "piàn",
+      "strokes": 4,
+      "level": 1,
+      "definition": "片；平而薄"
+    },
+    {
+      "char": "群",
+      "pinyin": "qún",
+      "strokes": 13,
+      "level": 2,
+      "definition": "群；聚在一起"
+    },
+    {
+      "char": "些",
+      "pinyin": "xiē",
+      "strokes": 7,
+      "level": 1,
+      "definition": "一些"
+    },
+    {
+      "char": "每",
+      "pinyin": "měi",
+      "strokes": 7,
+      "level": 1,
+      "definition": "每个"
+    },
+    {
+      "char": "怎",
+      "pinyin": "zěn",
+      "strokes": 9,
+      "level": 1,
+      "definition": "怎么"
+    },
+    {
+      "char": "什",
+      "pinyin": "shén",
+      "strokes": 4,
+      "level": 1,
+      "definition": "什么"
+    },
+    {
+      "char": "谁",
+      "pinyin": "shuí",
+      "strokes": 10,
+      "level": 2,
+      "definition": "谁"
+    },
+    {
+      "char": "哪",
+      "pinyin": "nǎ",
+      "strokes": 9,
+      "level": 1,
+      "definition": "哪里"
+    },
+    {
+      "char": "那",
+      "pinyin": "nà",
+      "strokes": 6,
+      "level": 1,
+      "definition": "那个"
+    },
+    {
+      "char": "这",
+      "pinyin": "zhè",
+      "strokes": 7,
+      "level": 1,
+      "definition": "这个"
+    },
+    {
+      "char": "的",
+      "pinyin": "de",
+      "strokes": 8,
+      "level": 1,
+      "definition": "的"
+    },
+    {
+      "char": "了",
+      "pinyin": "le",
+      "strokes": 2,
+      "level": 1,
+      "definition": "了"
+    },
+    {
+      "char": "吗",
+      "pinyin": "ma",
+      "strokes": 6,
+      "level": 1,
+      "definition": "吗"
+    },
+    {
+      "char": "呢",
+      "pinyin": "ne",
+      "strokes": 8,
+      "level": 1,
+      "definition": "呢"
+    },
+    {
+      "char": "吧",
+      "pinyin": "ba",
+      "strokes": 7,
+      "level": 1,
+      "definition": "吧"
+    },
+    {
+      "char": "不",
+      "pinyin": "bù",
+      "strokes": 4,
+      "level": 1,
+      "definition": "不"
+    },
+    {
+      "char": "是",
+      "pinyin": "shì",
+      "strokes": 9,
+      "level": 1,
+      "definition": "是"
+    },
+    {
+      "char": "有",
+      "pinyin": "yǒu",
+      "strokes": 6,
+      "level": 1,
+      "definition": "有"
+    },
+    {
+      "char": "没",
+      "pinyin": "méi",
+      "strokes": 7,
+      "level": 1,
+      "definition": "没有"
+    },
+    {
+      "char": "和",
+      "pinyin": "hé",
+      "strokes": 8,
+      "level": 1,
+      "definition": "和"
+    },
+    {
+      "char": "在",
+      "pinyin": "zài",
+      "strokes": 6,
+      "level": 1,
+      "definition": "在"
+    },
+    {
+      "char": "会",
+      "pinyin": "huì",
+      "strokes": 6,
+      "level": 1,
+      "definition": "会；能够"
+    },
+    {
+      "char": "能",
+      "pinyin": "néng",
+      "strokes": 10,
+      "level": 2,
+      "definition": "能够"
+    },
+    {
+      "char": "要",
+      "pinyin": "yào",
+      "strokes": 9,
+      "level": 1,
+      "definition": "要"
+    },
+    {
+      "char": "可",
+      "pinyin": "kě",
+      "strokes": 5,
+      "level": 1,
+      "definition": "可以"
+    },
+    {
+      "char": "以",
+      "pinyin": "yǐ",
+      "strokes": 4,
+      "level": 1,
+      "definition": "可以"
+    },
+    {
+      "char": "很",
+      "pinyin": "hěn",
+      "strokes": 9,
+      "level": 1,
+      "definition": "很"
+    },
+    {
+      "char": "太",
+      "pinyin": "tài",
+      "strokes": 4,
+      "level": 1,
+      "definition": "太"
+    },
+    {
+      "char": "最",
+      "pinyin": "zuì",
+      "strokes": 12,
+      "level": 2,
+      "definition": "最"
+    },
+    {
+      "char": "更",
+      "pinyin": "gèng",
+      "strokes": 7,
+      "level": 1,
+      "definition": "更"
+    },
+    {
+      "char": "真",
+      "pinyin": "zhēn",
+      "strokes": 10,
+      "level": 2,
+      "definition": "真"
+    },
+    {
+      "char": "全",
+      "pinyin": "quán",
+      "strokes": 6,
+      "level": 1,
+      "definition": "全部"
+    },
+    {
+      "char": "都",
+      "pinyin": "dōu",
+      "strokes": 10,
+      "level": 1,
+      "definition": "都"
+    },
+    {
+      "char": "还",
+      "pinyin": "hái",
+      "strokes": 7,
+      "level": 1,
+      "definition": "还是"
+    },
+    {
+      "char": "又",
+      "pinyin": "yòu",
+      "strokes": 2,
+      "level": 1,
+      "definition": "又"
+    },
+    {
+      "char": "也",
+      "pinyin": "yě",
+      "strokes": 3,
+      "level": 1,
+      "definition": "也"
+    },
+    {
+      "char": "就",
+      "pinyin": "jiù",
+      "strokes": 12,
+      "level": 1,
+      "definition": "就"
+    },
+    {
+      "char": "才",
+      "pinyin": "cái",
+      "strokes": 3,
+      "level": 1,
+      "definition": "才"
+    },
+    {
+      "char": "已",
+      "pinyin": "yǐ",
+      "strokes": 3,
+      "level": 1,
+      "definition": "已经"
+    },
+    {
+      "char": "经",
+      "pinyin": "jīng",
+      "strokes": 8,
+      "level": 1,
+      "definition": "经过"
+    },
+    {
+      "char": "刚",
+      "pinyin": "gāng",
+      "strokes": 6,
+      "level": 1,
+      "definition": "刚才"
+    },
+    {
+      "char": "常",
+      "pinyin": "cháng",
+      "strokes": 11,
+      "level": 2,
+      "definition": "经常"
+    },
+    {
+      "char": "总",
+      "pinyin": "zǒng",
+      "strokes": 9,
+      "level": 2,
+      "definition": "总是"
+    },
+    {
+      "char": "别",
+      "pinyin": "bié",
+      "strokes": 7,
+      "level": 1,
+      "definition": "别"
+    },
+    {
+      "char": "成",
+      "pinyin": "chéng",
+      "strokes": 6,
+      "level": 1,
+      "definition": "成功"
+    },
+    {
+      "char": "功",
+      "pinyin": "gōng",
+      "strokes": 5,
+      "level": 1,
+      "definition": "功夫；成功"
+    },
+    {
+      "char": "失",
+      "pinyin": "shī",
+      "strokes": 5,
+      "level": 2,
+      "definition": "失败"
+    },
+    {
+      "char": "败",
+      "pinyin": "bài",
+      "strokes": 8,
+      "level": 2,
+      "definition": "失败"
+    }
+  ]
