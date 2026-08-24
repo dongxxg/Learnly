@@ -1,12 +1,15 @@
 package config
 
 import (
+	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 
-	"github.com/spf13/viper"
+	pkgconfig "github.com/dongxxg/go-tools/config"
 )
 
-// Config 聚合所有子配置。环境变量前缀 LEARNLY_，例：LEARNLY_POSTGRES_HOST。
+// Config 聚合所有子配置。环境变量名为配置键大写、点号换下划线，例：POSTGRES_HOST、JWT_SECRET。
 type Config struct {
 	Server   ServerConfig
 	Postgres PostgresConfig
@@ -52,45 +55,84 @@ type JWTConfig struct {
 	ExpireHours int
 }
 
+// 配置文件名，与 pkg/config 的默认约定一致。
+const configFileName = "configuration.toml"
+
+// Load 加载配置。底层由 pkg/config 读取 configuration.toml，
+// 环境变量优先于文件值；jwt.secret 为空时报错，必须由环境变量或文件提供。
 func Load() (*Config, error) {
-	v := viper.New()
-	v.SetEnvPrefix("LEARNLY")
-	v.AutomaticEnv()
+	if err := ensureLoaded(); err != nil {
+		return nil, err
+	}
 
-	v.SetDefault("SERVER_PORT", "8080")
-	v.SetDefault("SERVER_MODE", "debug")
-	v.SetDefault("POSTGRES_HOST", "localhost")
-	v.SetDefault("POSTGRES_PORT", "5432")
-	v.SetDefault("POSTGRES_SSLMODE", "disable")
-	v.SetDefault("REDIS_HOST", "localhost")
-	v.SetDefault("REDIS_PORT", "6379")
-	v.SetDefault("REDIS_DB", 0)
-	v.SetDefault("AI_BASEURL", "http://ai-service:8000")
-	v.SetDefault("JWT_EXPIRE_HOURS", 24)
-
-	return &Config{
+	cfg := &Config{
 		Server: ServerConfig{
-			Port: v.GetString("server_port"),
-			Mode: v.GetString("server_mode"),
+			Port: pkgconfig.GetString("server.port"),
+			Mode: pkgconfig.GetString("server.mode"),
 		},
 		Postgres: PostgresConfig{
-			Host:     v.GetString("postgres_host"),
-			Port:     v.GetString("postgres_port"),
-			User:     v.GetString("postgres_user"),
-			Password: v.GetString("postgres_password"),
-			DBName:   v.GetString("postgres_dbname"),
-			SSLMode:  v.GetString("postgres_sslmode"),
+			Host:     pkgconfig.GetString("postgres.host"),
+			Port:     pkgconfig.GetString("postgres.port"),
+			User:     pkgconfig.GetString("postgres.user"),
+			Password: pkgconfig.GetString("postgres.password"),
+			DBName:   pkgconfig.GetString("postgres.dbname"),
+			SSLMode:  pkgconfig.GetString("postgres.sslmode"),
 		},
 		Redis: RedisConfig{
-			Host:     v.GetString("redis_host"),
-			Port:     v.GetString("redis_port"),
-			Password: v.GetString("redis_password"),
-			DB:       v.GetInt("redis_db"),
+			Host:     pkgconfig.GetString("redis.host"),
+			Port:     pkgconfig.GetString("redis.port"),
+			Password: pkgconfig.GetString("redis.password"),
+			DB:       pkgconfig.GetInt("redis.db"),
 		},
-		AI: AIConfig{BaseURL: v.GetString("ai_baseurl")},
+		AI: AIConfig{BaseURL: pkgconfig.GetString("ai.baseurl")},
 		JWT: JWTConfig{
-			Secret:      v.GetString("jwt_secret"),
-			ExpireHours: v.GetInt("jwt_expire_hours"),
+			Secret:      pkgconfig.GetString("jwt.secret"),
+			ExpireHours: pkgconfig.GetInt("jwt.expire_hours"),
 		},
-	}, nil
+	}
+
+	if cfg.JWT.Secret == "" {
+		return nil, errors.New("jwt.secret is empty: set JWT_SECRET env or jwt.secret in configuration.toml")
+	}
+	if cfg.JWT.ExpireHours <= 0 {
+		cfg.JWT.ExpireHours = 24
+	}
+	return cfg, nil
+}
+
+// ensureLoaded 确保 pkg/config 已加载配置文件。
+// pkg/config 的 init 仅在二进制同级 conf/ 目录发现配置文件；go run 场景二进制在
+// 临时目录，这里按工作目录兜底尝试常见路径，均未命中则报错。
+func ensureLoaded() error {
+	if pkgconfig.GetConfFile() != "" {
+		return nil
+	}
+
+	wd, _ := os.Getwd()
+	candidates := []string{
+		os.Getenv("CONFIG_PATH"),
+		filepath.Join("conf", configFileName),
+		filepath.Join("cmd", "server", "conf", configFileName),
+	}
+	for _, path := range candidates {
+		if path == "" {
+			continue
+		}
+		if _, err := os.Stat(path); err != nil {
+			continue
+		}
+		return initConfig(path)
+	}
+	return fmt.Errorf("config file %s not found (cwd=%s): set CONFIG_PATH or run from backend/ directory", configFileName, wd)
+}
+
+// initConfig 调用 pkg/config.Init 并把其 panic 转为 error（如 TOML 解析失败）。
+func initConfig(path string) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("load config %s failed: %v", path, r)
+		}
+	}()
+	pkgconfig.Init(filepath.Dir(path), filepath.Base(path))
+	return nil
 }

@@ -23,9 +23,9 @@ var (
 	ErrTokenInvalid = errors.New("token invalid")
 )
 
-// getSecret 读取 JWT 密钥，优先环境变量 LEARNLY_JWT_SECRET。
+// getSecret 读取 JWT 密钥，优先环境变量 JWT_SECRET（配置键 jwt.secret）。
 func getSecret() []byte {
-	secret := os.Getenv("LEARNLY_JWT_SECRET")
+	secret := os.Getenv("JWT_SECRET")
 	if secret == "" {
 		// 开发期默认值，生产必须通过环境变量注入。
 		secret = "learnly-dev-secret-change-me"

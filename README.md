@@ -39,7 +39,7 @@ frontend(uni-app/Vue3/TS)  ──▶  backend(Go/Gin/GORM + PostgreSQL + Redis)
 
 ```bash
 cd deploy
-cp .env.example .env          # 填入 LEARNLY_AI_LLM_API_KEY，改 LEARNLY_JWT_SECRET
+cp .env.example .env          # 填入 LEARNLY_AI_LLM_API_KEY，改 JWT_SECRET
 docker compose up -d --build
 # 访问 http://localhost
 ```

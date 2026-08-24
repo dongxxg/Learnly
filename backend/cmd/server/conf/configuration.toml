@@ -1,0 +1,31 @@
+# 知芽 Learnly 后端配置
+# 优先级：环境变量 > 本文件。环境变量名为配置键大写、点号换下划线，例：POSTGRES_HOST、JWT_SECRET。
+# 敏感项（password/secret）留空，由环境变量注入。
+
+[server]
+port = "8080"   # 监听端口
+mode = "debug"  # debug | release | test
+
+[postgres]
+host = "localhost"
+port = "5432"
+user = "learnly"
+password = "" # 环境变量注入：POSTGRES_PASSWORD
+dbname = "learnly"
+sslmode = "disable"
+
+[redis]
+host = "localhost"
+port = "6379"
+password = ""
+db = 0
+
+[ai]
+baseurl = "http://ai-service:8000" # ai-service 内部地址，用于 AI 老师等请求转发
+
+[jwt]
+secret = "" # 必填，环境变量注入：JWT_SECRET；为空时启动报错
+expire_hours = 24
+
+[SD]
+type = "none" # 不接配置中心；接入时改为 nacos / consul 并补全 SD.Server.* 段

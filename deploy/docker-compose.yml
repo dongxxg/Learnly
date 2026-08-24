@@ -5,15 +5,15 @@ services:
     image: postgres:16-alpine
     container_name: learnly-postgres
     environment:
-      POSTGRES_USER: ${LEARNLY_POSTGRES_USER:-learnly}
-      POSTGRES_PASSWORD: ${LEARNLY_POSTGRES_PASSWORD:-learnly}
-      POSTGRES_DB: ${LEARNLY_POSTGRES_DBNAME:-learnly}
+      POSTGRES_USER: ${POSTGRES_USER:-learnly}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-learnly}
+      POSTGRES_DB: ${POSTGRES_DBNAME:-learnly}
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${LEARNLY_POSTGRES_USER:-learnly}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-learnly}"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -43,11 +43,11 @@ services:
     container_name: learnly-backend
     env_file: .env
     environment:
-      LEARNLY_SERVER_PORT: "8080"
-      LEARNLY_SERVER_MODE: "release"
-      LEARNLY_POSTGRES_HOST: postgres
-      LEARNLY_REDIS_HOST: redis
-      LEARNLY_AI_BASEURL: http://ai-service:8000
+      SERVER_PORT: "8080"
+      SERVER_MODE: "release"
+      POSTGRES_HOST: postgres
+      REDIS_HOST: redis
+      AI_BASEURL: http://ai-service:8000
     ports:
       - "8080:8080"
     depends_on:

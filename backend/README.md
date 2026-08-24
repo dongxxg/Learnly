@@ -7,7 +7,7 @@ Go + Gin + GORM 业务平台。承载用户、课程、学习进度、家长数�
 - Gin — HTTP 框架
 - GORM + PostgreSQL — ORM / 主库
 - go-redis — 缓存（会话、限流、热点）
-- viper — 配置（环境变量，前缀 `LEARNLY_`）
+- go-tools/config — 配置（`conf/configuration.toml` + 无前缀环境变量覆盖，例 `POSTGRES_HOST`）
 
 ## 目录结构
 
