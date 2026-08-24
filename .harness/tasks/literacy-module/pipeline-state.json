@@ -1,0 +1,286 @@
+{
+  "schema_version": 6,
+  "change_name": "literacy-module",
+  "title": "实现识字模块（汉字列表+详情+进度追踪+用户体系）",
+  "caller": "dongxx",
+  "created_at": "2026-08-07T06:43:14.992Z",
+  "updated_at": "2026-08-07T08:12:01.705Z",
+  "acceptance_criteria": [
+    "汉字列表页（分页/按难度筛选）",
+    "汉字详情（拼音/释义/笔顺动画占位）",
+    "学习进度追踪（已学/在学/未学状态）",
+    "JWT鉴权+多儿童档案切换",
+    "内置seed几百常用字",
+    "H5+微信小程序双端适配",
+    "单测覆盖率≥80%"
+  ],
+  "current_phase": "implement",
+  "pipeline": {
+    "intake": {
+      "status": "done",
+      "rd_skill": null,
+      "first_pass": true,
+      "rework_reasons": [],
+      "artifact_paths": [],
+      "started_at": "2026-08-07T06:43:30.200Z",
+      "last_resumed_at": "2026-08-07T06:43:30.200Z",
+      "exit_status": "DONE",
+      "completed_at": "2026-08-07T06:43:47.864Z"
+    },
+    "explore": {
+      "status": "done",
+      "rd_skill": "/rd:explore",
+      "first_pass": true,
+      "rework_reasons": [],
+      "artifact_paths": [],
+      "started_at": "2026-08-07T06:43:47.865Z",
+      "last_resumed_at": "2026-08-07T06:43:47.865Z",
+      "dispatch_history": [
+        {
+          "started_at": "2026-08-07T06:44:03.416Z",
+          "completed_at": "2026-08-07T06:54:39.010Z",
+          "token_usage": {
+            "input_tokens": 33831,
+            "output_tokens": 6129,
+            "cache_read_input_tokens": 644736,
+            "cache_creation_input_tokens": 0,
+            "model": "LongCat-2.0",
+            "backend": "claude"
+          },
+          "exit_status": "DONE",
+          "context_mode": "full",
+          "wrapper_invoked": true,
+          "summary": "完成识字模块探索：领域模型(Character/Progress/Parent/Child)、进度状态机、6个架构决策点、API设计草案、前端页面结构、4阶段实施路径"
+        }
+      ],
+      "dispatch_started_at": "2026-08-07T06:44:03.416Z",
+      "dispatch_completed_at": "2026-08-07T06:54:39.010Z",
+      "exit_status": "DONE",
+      "completed_at": "2026-08-07T06:54:53.733Z"
+    },
+    "propose": {
+      "status": "done",
+      "rd_skill": "/rd:propose",
+      "first_pass": false,
+      "rework_reasons": [],
+      "artifact_paths": [],
+      "started_at": "2026-08-07T06:54:53.735Z",
+      "last_resumed_at": "2026-08-07T06:54:53.735Z",
+      "dispatch_history": [
+        {
+          "started_at": "2026-08-07T06:55:10.771Z",
+          "completed_at": "2026-08-07T06:59:20.695Z",
+          "token_usage": {
+            "input_tokens": 7895,
+            "output_tokens": 2624,
+            "cache_read_input_tokens": 651264,
+            "cache_creation_input_tokens": 0,
+            "model": "LongCat-2.0",
+            "backend": "claude"
+          },
+          "exit_status": "BLOCKED",
+          "context_mode": "full",
+          "wrapper_invoked": true,
+          "summary": "API 400 推理错误（瞬态），需重试"
+        },
+        {
+          "started_at": "2026-08-07T06:59:35.712Z",
+          "completed_at": "2026-08-07T07:01:19.309Z",
+          "token_usage": {
+            "input_tokens": 9863,
+            "output_tokens": 3055,
+            "cache_read_input_tokens": 683392,
+            "cache_creation_input_tokens": 0,
+            "model": "LongCat-2.0",
+            "backend": "claude"
+          },
+          "exit_status": "BLOCKED",
+          "context_mode": "full",
+          "wrapper_invoked": true,
+          "summary": "连续2次 API 400 错误：parameter 'type' invalid，疑似模型工具调用参数问题"
+        },
+        {
+          "started_at": "2026-08-07T07:25:01.445Z",
+          "completed_at": null,
+          "token_usage": null,
+          "exit_status": null,
+          "context_mode": "full",
+          "_transcript_line": 58,
+          "wrapper_invoked": true
+        }
+      ],
+      "dispatch_started_at": "2026-08-07T07:25:01.445Z",
+      "dispatch_completed_at": "2026-08-07T07:01:19.309Z",
+      "exit_status": "DONE",
+      "completed_at": "2026-08-07T08:12:01.703Z"
+    },
+    "design-review": {
+      "status": "pending",
+      "rd_skill": null,
+      "first_pass": null,
+      "rework_reasons": [],
+      "artifact_paths": []
+    },
+    "implement": {
+      "status": "in_progress",
+      "rd_skill": "/rd:apply",
+      "first_pass": null,
+      "rework_reasons": [],
+      "artifact_paths": [],
+      "started_at": "2026-08-07T08:12:01.703Z",
+      "last_resumed_at": "2026-08-07T08:12:01.703Z"
+    },
+    "test": {
+      "status": "pending",
+      "rd_skill": null,
+      "first_pass": null,
+      "rework_reasons": [],
+      "artifact_paths": []
+    },
+    "code-review": {
+      "status": "pending",
+      "rd_skill": null,
+      "first_pass": null,
+      "rework_reasons": [],
+      "artifact_paths": []
+    },
+    "debate": {
+      "status": "pending",
+      "rd_skill": null,
+      "first_pass": null,
+      "rework_reasons": [],
+      "artifact_paths": []
+    },
+    "archive": {
+      "status": "pending",
+      "rd_skill": null,
+      "first_pass": null,
+      "rework_reasons": [],
+      "artifact_paths": []
+    }
+  },
+  "quality_gates": {
+    "QG-ARCH-001": "pending",
+    "QG-DEV-001": "pending",
+    "QG-REV-001": "pending",
+    "QG-REV-002": "pending"
+  },
+  "scores": {
+    "architect": null,
+    "reviewer": null,
+    "tester": null
+  },
+  "rework_count": {
+    "architect": 0,
+    "developer": 0,
+    "tester": 0,
+    "reviewer": 0
+  },
+  "blocked_count": 0,
+  "hotfix_mode": false,
+  "flow_type": "development",
+  "docs_mode": false,
+  "intent": {
+    "raw_input": "完成识字模块",
+    "task_type": "development",
+    "intent_category": "development",
+    "confidence": 0.9,
+    "affected_files": [
+      "frontend/src",
+      "backend/internal",
+      "backend/cmd",
+      "ai-service/app"
+    ],
+    "modules": [
+      "user-system",
+      "literacy",
+      "frontend",
+      "backend"
+    ],
+    "complexity_hint": "L",
+    "parsed_at": "2026-08-07T06:43:15.207Z"
+  },
+  "oracle_link": null,
+  "dispatch_efficiency": {
+    "pm_input_at": "2026-08-07T06:43:14.992Z",
+    "first_artifact_at": "2026-08-07T08:12:01.594Z",
+    "total_dispatch_count": 0,
+    "pm_to_first_artifact_ms": 5326602,
+    "pm_to_archive_ms": null
+  },
+  "adaptive_overrides": {
+    "skipped_phases": [
+      "design-review"
+    ],
+    "forced_phases": [],
+    "pre_guidance_history": []
+  },
+  "token_summary": {
+    "total_input_tokens": 51589,
+    "total_output_tokens": 11808,
+    "total_tokens": 63397,
+    "by_phase": {
+      "explore": {
+        "input_tokens": 33831,
+        "output_tokens": 6129,
+        "model": "LongCat-2.0"
+      },
+      "propose": {
+        "input_tokens": 17758,
+        "output_tokens": 5679,
+        "model": "LongCat-2.0"
+      }
+    },
+    "by_role": {
+      "architect": {
+        "input_tokens": 51589,
+        "output_tokens": 11808,
+        "model": "LongCat-2.0"
+      }
+    },
+    "by_model": {
+      "LongCat-2.0": {
+        "input_tokens": 51589,
+        "output_tokens": 11808,
+        "dispatch_count": 3
+      }
+    },
+    "by_backend": {
+      "claude": {
+        "input_tokens": 51589,
+        "output_tokens": 11808,
+        "cached_tokens": 1979392,
+        "reasoning_tokens": null,
+        "total_tokens": null,
+        "dispatch_count": 3,
+        "model": "LongCat-2.0"
+      }
+    },
+    "by_role_backend": {
+      "architect.claude": {
+        "input_tokens": 51589,
+        "output_tokens": 11808,
+        "cached_tokens": 1979392,
+        "reasoning_tokens": null,
+        "total_tokens": null,
+        "dispatch_count": 3,
+        "model": "LongCat-2.0"
+      }
+    },
+    "backend_fallback_count": 0,
+    "last_calculated_at": "2026-08-07T08:12:01.706Z"
+  },
+  "quality_metrics": {
+    "first_pass_rate": null,
+    "total_rework_loops": 0,
+    "automated_catches": 0,
+    "time_to_first_code_review_ms": null,
+    "total_wall_clock_ms": null,
+    "phases_completed": 4,
+    "phases_total": 8
+  },
+  "context_upgrade_attempts": 0,
+  "mode": "legacy",
+  "team": null,
+  "pending_rework": null
+}
