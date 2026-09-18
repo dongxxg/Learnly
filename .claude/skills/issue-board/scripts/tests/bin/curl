@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+# Fake curl for unit tests. Shadowed onto PATH by test setup.
+#
+# Behavior is driven by environment variables (so it works inside $(...) subshells
+# where bash function overrides are lost):
+#   MOCK_CURL_RESPONSE_FILE  — file whose contents are written to stdout as body
+#   MOCK_CURL_RESPONSE_FN    — name of a shell function to invoke to produce body
+#                              (overrides _FILE when set; receives "$*" = full args).
+#                              The function may also write response headers directly
+#                              to $MOCK_CURL_HEADERS_OUT (see below) so it can vary
+#                              headers per page — useful for pagination tests.
+#   MOCK_CURL_HEADERS_FILE   — static file copied to the -D target (when the
+#                              response function does not write headers itself)
+#   MOCK_CURL_STATUS         — numeric HTTP status used to synthesize a status
+#                              line when neither the response fn nor
+#                              MOCK_CURL_HEADERS_FILE provides headers
+#   MOCK_CURL_CALL_LOG       — append "$*" (one line per call) for assertions
+#
+# The real curl's -D FILE flag writes response headers to FILE. We honor that by
+# looking at the argument after -D in the forwarded args and writing headers there.
+# The -D target is also exposed to the response function as MOCK_CURL_HEADERS_OUT
+# so it can stage per-page headers (the function runs in a $(...) subshell where
+# its env exports would otherwise be lost, but filesystem writes survive).
+set -uo pipefail
+
+args=("$@")
+headers_out=""
+
+# Parse -D <file> to know where headers should land (http.sh passes -D <file>).
+i=0
+while [ $i -lt ${#args[@]} ]; do
+  case "${args[$i]}" in
+    -D)
+      headers_out="${args[$((i+1))]}"
+      i=$((i+2))
+      ;;
+    -D*)
+      headers_out="${args[$i]#-D}"
+      i=$((i+1))
+      ;;
+    *)
+      i=$((i+1))
+      ;;
+  esac
+done
+
+# Expose the -D target so the response function can stage headers itself.
+export MOCK_CURL_HEADERS_OUT="${headers_out}"
+
+# Record the call for assertions (best-effort, never fail the test on log issues).
+if [ -n "${MOCK_CURL_CALL_LOG:-}" ]; then
+  printf '%s\n' "$*" >>"${MOCK_CURL_CALL_LOG}" 2>/dev/null || true
+fi
+
+# Produce body. The response function may write $MOCK_CURL_HEADERS_OUT as a side
+# effect (this is how pagination tests return per-page X-Next-Page headers).
+wrote_headers_via_fn=0
+if [ -n "${MOCK_CURL_RESPONSE_FN:-}" ] && declare -f "${MOCK_CURL_RESPONSE_FN}" >/dev/null 2>&1; then
+  body=$("${MOCK_CURL_RESPONSE_FN}" "$*")
+  if [ -n "${headers_out}" ] && [ "${headers_out}" != "/dev/null" ] && [ -s "${headers_out}" ]; then
+    wrote_headers_via_fn=1
+  fi
+else
+  if [ -n "${MOCK_CURL_RESPONSE_FILE:-}" ] && [ -f "${MOCK_CURL_RESPONSE_FILE}" ]; then
+    body=$(cat "${MOCK_CURL_RESPONSE_FILE}")
+  else
+    body=""
+  fi
+fi
+
+# Write headers to the -D target file unless the response function already did.
+if [ "${wrote_headers_via_fn}" -eq 0 ] && [ -n "${headers_out}" ] && [ "${headers_out}" != "/dev/null" ]; then
+  if [ -n "${MOCK_CURL_HEADERS_FILE:-}" ] && [ -f "${MOCK_CURL_HEADERS_FILE}" ]; then
+    cp "${MOCK_CURL_HEADERS_FILE}" "${headers_out}"
+  elif [ -n "${MOCK_CURL_STATUS:-}" ]; then
+    {
+      printf 'HTTP/1.1 %s\r\n' "${MOCK_CURL_STATUS}"
+      printf 'Content-Type: application/json\r\n'
+    } >"${headers_out}"
+  fi
+fi
+
+printf '%s' "${body}"
+exit 0

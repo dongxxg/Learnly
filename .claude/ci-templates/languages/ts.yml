@@ -1,0 +1,11 @@
+# Uni-AURI CI Template — TypeScript 语言默认变量
+# 用法：include 此文件设置 TS 项目的 BUILD_IMAGE/CHECK_CMD/TEST_CMD/COVERAGE_CMD
+# 注意：COVERAGE_CMD 依赖 @vitest/coverage-v8 包，项目需 npm install -D @vitest/coverage-v8
+# 注意：TEST_CMD 通过 tee 保存 vitest 输出（含 All files 覆盖率行）到 vitest-cov.log；
+#       COVERAGE_CMD 是纯解析命令（基于 vitest-cov.log），不会重跑测试。
+
+variables:
+  BUILD_IMAGE: "hub.unitechs.com/public/gitlab/gitlab-runner-all-in-one:20250509"
+  CHECK_CMD: "npx eslint ."
+  TEST_CMD: "npx vitest run --coverage 2>&1 | tee vitest-cov.log; exit ${PIPESTATUS[0]}"
+  COVERAGE_CMD: "awk -F'|' '/All files/{gsub(/ /,\"\",$2); print $2; exit}' vitest-cov.log"

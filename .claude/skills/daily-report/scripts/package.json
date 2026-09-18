@@ -1,0 +1,14 @@
+{
+  "name": "taskboard-daily-scripts",
+  "version": "1.0.0",
+  "description": "Renderer + schema validator for the taskboard-daily skill (no MCP calls; MCP tools are invoked by the model)",
+  "private": true,
+  "main": "render-report.js",
+  "scripts": {
+    "test": "node --test __tests__/harness-projects.test.js __tests__/collect-ai-main-usage.test.js __tests__/collect-ai-subrepo.test.js __tests__/collect-ai-codex-session.test.js __tests__/collect-ai-phase-fallback.test.js __tests__/collect-ai-zcode.test.js __tests__/version-gate.test.js __tests__/render-report-schema-gate.test.js __tests__/collect-ai-usage-dedup.test.js"
+  },
+  "dependencies": {
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1"
+  }
+}

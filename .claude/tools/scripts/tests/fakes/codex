@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+# fake codex CLI — 根据 HARNESS_FAKE_CODEX_MODE 切换场景
+#
+# Modes:
+#   success                 : 返回 DONE JSON 尾块（plain text，默认；兼容旧 e2e）
+#   auth_fail               : exit 1 + stderr 含 401 Unauthorized
+#   timeout                 : sleep 长时间（被 execFileSync timeout 杀掉）
+#   unparseable             : 仅自由文本，无 JSON
+#   network_error           : exit 1 + stderr 网络关键词
+#   jsonl_success           : codex exec --json JSONL 成功路径（turn.completed.usage + agent_message JSON）
+#   jsonl_rate_limit        : JSONL 含 item.completed.type=error (rate_limit)
+#   jsonl_no_turn_completed : JSONL 缺 turn.completed（触发 plain text fallback）
+
+MODE="${HARNESS_FAKE_CODEX_MODE:-success}"
+
+# 检测 --json 参数（Phase 3a 切换 JSONL 协议）
+ARGS_JSON=0
+for arg in "$@"; do
+    if [ "$arg" = "--json" ]; then
+        ARGS_JSON=1
+    fi
+done
+
+# JSONL 模式优先（如果 --json 被传入且 MODE 是 jsonl_* 系列）
+emit_jsonl() {
+    local mode="$1"
+    case "$mode" in
+        jsonl_success)
+            printf '%s\n' '{"type":"session.started","session_id":"fake-session-001"}'
+            printf '%s\n' '{"type":"item.completed","item":{"type":"agent_message","text":"I will implement the feature."}}'
+            printf '%s\n' '{"type":"item.completed","item":{"type":"reasoning","text":"thinking..."}}'
+            printf '%s\n' '{"type":"item.completed","item":{"type":"agent_message","text":"Done.\n```json\n{\"exit_status\":\"DONE\",\"summary\":\"jsonl success\",\"artifacts\":[\"src/feature.js\"]}\n```"}}'
+            printf '%s\n' '{"type":"turn.completed","usage":{"input_tokens":9365,"cached_input_tokens":4480,"output_tokens":11,"reasoning_output_tokens":9}}'
+            ;;
+        jsonl_rate_limit)
+            printf '%s\n' '{"type":"session.started","session_id":"fake-session-002"}'
+            printf '%s\n' '{"type":"item.completed","item":{"type":"agent_message","text":"starting..."}}'
+            printf '%s\n' '{"type":"item.completed","item":{"type":"error","message":"RateLimitError: too many requests, retry in 60s"}}'
+            printf '%s\n' '{"type":"turn.completed","usage":{"input_tokens":100,"output_tokens":5}}'
+            ;;
+        jsonl_no_turn_completed)
+            printf '%s\n' '{"type":"session.started"}'
+            printf '%s\n' '{"type":"item.completed","item":{"type":"agent_message","text":"```json\n{\"exit_status\":\"DONE\",\"summary\":\"no turn completed event\"}\n```"}}'
+            # 故意不发 turn.completed
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+case "$MODE" in
+    jsonl_success|jsonl_rate_limit|jsonl_no_turn_completed)
+        emit_jsonl "$MODE"
+        ;;
+    success)
+        # 旧 plain text 输出（即使 --json 被传入，旧 e2e 仍依赖此模式）
+        # Phase 3b: 加 sleep 模拟真实 codex exec 耗时，让 fanout 测试能验证真并行
+        sleep "${HARNESS_FAKE_CODEX_DELAY:-0.3}"
+        cat <<INNER
+codex exec mock
+--------
+workdir: $(pwd)
+tokens used
+9,379
+INNER
+        printf '```json\n{"exit_status":"DONE","summary":"success mode","tokens_used":9379}\n```\n'
+        ;;
+    auth_fail)
+        echo "ERROR: HTTP 401 Unauthorized: invalid_api_key" >&2
+        exit 1
+        ;;
+    timeout)
+        sleep 30
+        exit 0
+        ;;
+    unparseable)
+        echo "Just some text without JSON blocks."
+        echo "Done: task completed"
+        ;;
+    network_error)
+        echo "ERROR: network connection failed: ETIMEDOUT" >&2
+        exit 1
+        ;;
+    *)
+        echo "Unknown HARNESS_FAKE_CODEX_MODE: $MODE" >&2
+        exit 1
+        ;;
+esac

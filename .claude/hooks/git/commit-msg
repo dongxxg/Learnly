@@ -1,0 +1,155 @@
+#!/usr/bin/env bash
+# commit-msg hook: AI Git 提交规范 v4.2 — 纯 bash 实现
+# 规范文档: $HARNESS_ROOT/rules/ai-git-commit-spec.md
+#
+# 校验规则（与 pre-receive hook 保持一致）:
+#   1. 首行四字段: [任务号] 阶段标识 模块名称[操作者类型]
+#   2. 首行与 body 之间必须有空行
+#   3. body 首行 type: 前缀（不含操作者，首行已有署名）
+#   4. 总长度 < 500 字符
+#   5. ci 类型禁止 AI 独立提交
+#   6. 模块名禁止过泛/过短/超长（新增 v4.2）
+
+set -euo pipefail
+
+# HARNESS_ROOT 缺省回退 .claude；env 未设时给默认值，避免 set -u 报错。
+HARNESS_ROOT="${HARNESS_ROOT:-.claude}"
+
+MSG_FILE="$1"
+MSG=$(cat "$MSG_FILE")
+[ -z "$MSG" ] && exit 0
+
+# ============================================================
+# GATE_BYPASS Challenge-Response 校验（pm_override 流程 step 8）
+# message 内 GATE_BYPASS:{NONCE} == .harness/.bypass-challenge NONCE
+#   == .claude/.bypass-approved，且 TTL ≤ 300s；通过后单次消费。
+#   校验失败直接拒绝提交（伪造 / 过期 / 未审批）。
+# ============================================================
+_REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+_CHALLENGE="$_REPO_ROOT/.harness/.bypass-challenge"
+_APPROVE="$_REPO_ROOT/.claude/.bypass-approved"
+_GATE_TOKEN="$(printf '%s' "$MSG" | grep -oE 'GATE_BYPASS:[0-9a-f]{8}' | head -1 || true)"
+
+if [ -n "$_GATE_TOKEN" ]; then
+    _TOKEN="${_GATE_TOKEN#GATE_BYPASS:}"
+    _VERIFY_ERROR=""
+
+    if [ ! -f "$_CHALLENGE" ] || [ ! -f "$_APPROVE" ]; then
+        _VERIFY_ERROR="challenge/approval 文件缺失（需先执行 gate-bypass-mint.sh 并经 PM 审批）"
+    else
+        _CHALLENGE_NONCE="$(cut -d'|' -f1 "$_CHALLENGE")"
+        _APPROVED_NONCE="$(head -1 "$_APPROVE")"
+        _CHALLENGE_TS="$(cut -d'|' -f6 "$_CHALLENGE")"
+        if [ "$_TOKEN" != "$_CHALLENGE_NONCE" ] || [ "$_TOKEN" != "$_APPROVED_NONCE" ]; then
+            _VERIFY_ERROR="NONCE 与 challenge/approval 记录不一致"
+        elif ! [[ "$_CHALLENGE_TS" =~ ^[0-9]+$ ]] || [ $(( $(date +%s) - 10#$_CHALLENGE_TS )) -gt 300 ]; then
+            _VERIFY_ERROR="NONCE 已过期（TTL 300s）"
+        fi
+    fi
+
+    if [ -n "$_VERIFY_ERROR" ]; then
+        echo "[commit-msg] ERROR: GATE_BYPASS 校验失败: $_VERIFY_ERROR" >&2
+        echo "  提示: 走 pm_override 流程重新铸造 NONCE，或删除 message 中的 GATE_BYPASS 行后正常提交" >&2
+        exit 1
+    fi
+
+    # 合法放行：单次消费令牌，并从校验用文本中剔除元数据行（避免误触格式规则）
+    rm -f "$_CHALLENGE" "$_APPROVE"
+    echo "[commit-msg] GATE_BYPASS 校验通过，令牌已消费"
+    MSG="$(printf '%s\n' "$MSG" | grep -vE '^(GATE_BYPASS:|PM-Approved:|Reason:)' || true)"
+fi
+
+HEADER=$(printf '%s' "$MSG" | head -n1)
+BODY_FIRST=$(printf '%s' "$MSG" | sed -n '3p')
+
+AI_ROLES="Developer|Architect|Tester|Reviewer|Debate|Doc|UX|Cond"
+
+error() { printf "[commit-msg] ERROR: %s\n" "$1" >&2; ERRORS=$((ERRORS + 1)); }
+hint()  { printf "  → %s\n" "$1" >&2; }
+
+ERRORS=0
+
+# 规则1: 首行四字段（含操作者类型）
+if ! [[ "$HEADER" =~ ^\[([A-Za-z0-9]*-[0-9]+|[0-9]+)\]\ (DEV|BUG|CM|TEST|DOCS|REFACTOR|PERF|SEC|CI|REL|HOTFIX|MIGRATE|WIP)\ ([^ ]+)\[(AI·($AI_ROLES)|AI-[a-zA-Z0-9_-]+\.($AI_ROLES)|H-[a-zA-Z0-9_-]+)\]$ ]]; then
+  error "首行格式错误: $HEADER"
+  hint "正确格式: [任务号] 阶段标识 模块名称[操作者类型]  （任务号必填，无任务时用 [0]）"
+  hint "阶段标识: DEV/BUG/CM/TEST/DOCS/REFACTOR/PERF/SEC/CI/REL/HOTFIX/MIGRATE/WIP"
+  hint "操作者（三选一）: [AI-{git用户}.{角色}] / [AI·{角色}]（简写，无 git 用户名时）/ [H-{git用户}]"
+  hint "正则: ^\\[([A-Za-z0-9]*-[0-9]+|[0-9]+)\\] (DEV|BUG|CM|TEST|DOCS|REFACTOR|PERF|SEC|CI|REL|HOTFIX|MIGRATE|WIP) ([^ ]+)\\[(AI·($AI_ROLES)|AI-[a-zA-Z0-9_-]+\\.($AI_ROLES)|H-[a-zA-Z0-9_-]+)\\]\$"
+  hint "合法示例:"
+  hint "  [630] DEV 融合引擎[AI-wangzk.Developer]   （标准有用户名）"
+  hint "  [630] DEV 融合引擎[AI·Developer]          （简写省略用户名）"
+  hint "  [0] BUG git-guard[AI-wangzk.Developer]    （无任务号用 [0]）"
+fi
+
+# 规则1.5: 操作者用户名必须匹配 git config user.name（防 AI 瞎编他人名字）
+# 仅对 [AI-{user}.{role}] 和 [H-{user}] 形式校验；[AI·{role}]（中间点无用户名）跳过
+GIT_USERNAME=$(git config user.name 2>/dev/null || echo "")
+OP_USERNAME=""
+if [[ "$HEADER" =~ \[AI-([a-zA-Z0-9_-]+)\.($AI_ROLES)\]$ ]]; then
+  OP_USERNAME="${BASH_REMATCH[1]}"
+elif [[ "$HEADER" =~ \[H-([a-zA-Z0-9_-]+)\]$ ]]; then
+  OP_USERNAME="${BASH_REMATCH[1]}"
+fi
+if [ -n "$OP_USERNAME" ] && [ -n "$GIT_USERNAME" ] && [ "$OP_USERNAME" != "$GIT_USERNAME" ]; then
+  error "操作者用户名 '$OP_USERNAME' 与 git config user.name '$GIT_USERNAME' 不一致"
+  hint "禁止 AI 编造他人用户名（可能用于伪装/推责），必须用真实 git 用户名"
+  hint "当前 git user.name: $GIT_USERNAME"
+  hint "正确首行末段: [AI-${GIT_USERNAME}.{角色}] 或 [H-${GIT_USERNAME}]"
+fi
+
+# 规则2: 首行与 body 之间必须有空行
+LINE2=$(printf '%s' "$MSG" | sed -n '2p')
+if [ -n "$LINE2" ]; then
+  error "首行与 body 之间缺少空行（第 2 行必须为空）"
+  hint "正确格式: 首行 → 空行 → body"
+fi
+
+# 规则3: body 首行 type（不要求重复写操作者，首行已有署名）
+if [ -z "$BODY_FIRST" ]; then
+  error "缺少 body（首行后需空一行再写 body）"
+  hint "正确格式: feat: 中文摘要"
+else
+  if ! [[ "$BODY_FIRST" =~ ^(feat|fix|refactor|docs|test|style|perf|chore|ci|revert): ]]; then
+    error "body 首行缺少 type 前缀: $BODY_FIRST"
+    hint "正确格式: feat: 中文摘要（type: feat/fix/refactor/docs/test/style/perf/chore/ci/revert）"
+  fi
+fi
+
+# 规则4: 长度
+MSG_LEN=${#MSG}
+if [ "$MSG_LEN" -gt 500 ]; then
+  error "总长度 ${MSG_LEN} 字符，超出 500 限制"
+  hint "请精简 commit message，保留首行 + body 首行 + 关键变更点"
+fi
+
+# 规则5: ci 类型禁止 AI 独立（检查首行操作者）
+if [[ "$HEADER" =~ \[AI·($AI_ROLES)\]$ ]] && [[ "$BODY_FIRST" =~ ^ci: ]]; then
+  error "ci 类型禁止 AI 独立提交"
+  hint "ci 类型首行必须使用 [H-{git用户名}] 或 [AI-{git用户名}.{角色}]"
+fi
+
+# 规则6: 模块名禁止过泛/过短/超长
+MODULE_NAME=$(printf '%s' "$HEADER" | sed -n 's/.*\] [A-Z]* \([^ ]*\)\[.*/\1/p')
+# 过泛黑名单：无意义的通用词，不能作为模块名
+BLACKLIST_MODULES="修改|优化|更新|update|fix|change|代码|杂项|misc|other|other"
+if printf '%s' "$MODULE_NAME" | grep -qiE "^(${BLACKLIST_MODULES})$"; then
+  error "模块名太泛化: $MODULE_NAME（禁止使用 $(echo "$BLACKLIST_MODULES" | tr '|' ' ') 等无意义词）"
+  hint "模块名应反映实际变更的文件/模块，参考 ai-git-commit-spec.md §模块名规则"
+fi
+# 长度: 2-24 字符（纯模块名，不含任务号/阶段/操作者）
+MODULE_LEN=${#MODULE_NAME}
+if [ "$MODULE_LEN" -lt 2 ]; then
+  error "模块名过短（${MODULE_LEN} 字符，最少 2 字符）: $MODULE_NAME"
+fi
+if [ "$MODULE_LEN" -gt 24 ]; then
+  error "模块名过长（${MODULE_LEN} 字符，最多 24 字符）: $MODULE_NAME"
+fi
+
+if [ "$ERRORS" -gt 0 ]; then
+  echo "" >&2
+  echo "发现 ${ERRORS} 个错误，请修正后重新提交。参考规范: $HARNESS_ROOT/rules/ai-git-commit-spec.md" >&2
+  exit 1
+fi
+
+exit 0

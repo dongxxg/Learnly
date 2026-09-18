@@ -1,0 +1,12 @@
+# Uni-AURI CI Template — Java 语言默认变量
+# 用法：include 此文件设置 Java 项目的 BUILD_IMAGE/CHECK_CMD/TEST_CMD/COVERAGE_CMD
+# 注意：COVERAGE_CMD 依赖 jacoco-maven-plugin，项目需在 pom.xml 中配置该插件
+# 注意：CHECK_CMD 默认留空（Java 项目未必配 checkstyle/spotbugs），项目按需在 variables 中设置
+# 注意：TEST_CMD 已含 jacoco:report，跑测试时同时生成 jacoco.csv；
+#       COVERAGE_CMD 是纯解析命令（基于 jacoco.csv），不会重跑测试。
+
+variables:
+  BUILD_IMAGE: "hub.unitechs.com/public/gitlab/gitlab-runner-all-in-one:20250509"
+  CHECK_CMD: ""
+  TEST_CMD: "mvn test jacoco:report"
+  COVERAGE_CMD: "tail -1 target/site/jacoco/jacoco.csv 2>/dev/null | awk -F',' '{if($4+$5>0) printf \"%.0f\", $5/($4+$5)*100}'"

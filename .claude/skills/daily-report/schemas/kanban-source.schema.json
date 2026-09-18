@@ -1,0 +1,124 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rd-harness/schemas/kanban-source.schema.json",
+  "title": "Kanban Source",
+  "description": "看板 JSON 镜像 schema。由 kanban-update.js --json-output 生成，由 submit-report.js 在提交前校验。tasks 必须是任务数组（不是聚合对象），聚合数据放在 stats 里。",
+  "type": "object",
+  "required": ["source_file", "tasks"],
+  "additionalProperties": false,
+  "properties": {
+    "source_file": {
+      "type": "string",
+      "minLength": 1,
+      "description": "源 md 文件路径"
+    },
+    "updated_at": {
+      "type": "string",
+      "description": "更新日期，格式 YYYY-MM-DD"
+    },
+    "updated_by": {
+      "type": "string",
+      "description": "更新者标识（尾部展示用，如 'AI' 或 'wangzk'）"
+    },
+    "updated_by_user": {
+      "type": "string",
+      "description": "执行所有权校验的 git_username（声明值，非可信值）"
+    },
+    "change_summary": {
+      "type": "string",
+      "description": "本次变更摘要，如 'S0-07✅ H-06🔵'"
+    },
+    "tasks": {
+      "type": "array",
+      "description": "看板任务数组（注意：不是聚合对象）。解决历史问题——看板镜像的 tasks 字段曾经是 {sprints,owners,chains} 聚合对象，与日报消费端的 tasks 数组同名不同义",
+      "items": { "$ref": "https://rd-harness/schemas/kanban-task.schema.json" }
+    },
+    "stats": { "$ref": "#/$defs/KanbanSourceStats" },
+    "deadline_calendar": { "$ref": "#/$defs/DeadlineCalendar" }
+  },
+
+  "$defs": {
+    "KanbanSourceStats": {
+      "type": "object",
+      "description": "看板镜像的聚合统计。聚合数据从历史 tasks:{sprints,owners,chains} 对象迁移到这里，按维度分桶",
+      "additionalProperties": false,
+      "properties": {
+        "sprint_stats": {
+          "type": "object",
+          "description": "按 Sprint 分桶的任务统计，key 为 'Sprint N'，value 为 {total, done}",
+          "additionalProperties": { "$ref": "#/$defs/StatsBucket" }
+        },
+        "owner_stats": {
+          "type": "object",
+          "description": "按 Owner 分桶的任务统计，key 为 owner 名，value 为 {total, done}",
+          "additionalProperties": { "$ref": "#/$defs/StatsBucket" }
+        },
+        "chain_stats": {
+          "type": "object",
+          "description": "按主链/子章节分桶的任务统计，key 为 main_chain 名，value 为 {total, done}",
+          "additionalProperties": { "$ref": "#/$defs/StatsBucket" }
+        }
+      }
+    },
+
+    "StatsBucket": {
+      "type": "object",
+      "description": "单维度的任务计数桶",
+      "required": ["total", "done"],
+      "additionalProperties": false,
+      "properties": {
+        "total": { "type": "integer", "minimum": 0 },
+        "done": { "type": "integer", "minimum": 0 }
+      }
+    },
+
+    "KanbanStats": {
+      "type": "object",
+      "description": "日报 kanban 段的状态计数（6 字段形态）。看板镜像本身用 KanbanSourceStats，不要混淆",
+      "required": ["total", "done", "in_progress", "at_risk", "blocked", "not_started"],
+      "additionalProperties": false,
+      "properties": {
+        "total": { "type": "integer", "minimum": 0 },
+        "done": { "type": "integer", "minimum": 0 },
+        "in_progress": { "type": "integer", "minimum": 0 },
+        "at_risk": { "type": "integer", "minimum": 0 },
+        "blocked": { "type": "integer", "minimum": 0 },
+        "not_started": { "type": "integer", "minimum": 0 }
+      }
+    },
+
+    "DeadlineCalendar": {
+      "type": "object",
+      "description": "按截止日期分桶的任务日历。overdue/today/tomorrow/day_after/unscheduled 五个桶",
+      "required": ["overdue", "today", "tomorrow", "day_after", "unscheduled"],
+      "additionalProperties": false,
+      "properties": {
+        "overdue": {
+          "type": "array",
+          "items": { "$ref": "https://rd-harness/schemas/kanban-task.schema.json" },
+          "description": "已过期的任务"
+        },
+        "today": {
+          "type": "array",
+          "items": { "$ref": "https://rd-harness/schemas/kanban-task.schema.json" },
+          "description": "今日截止的任务"
+        },
+        "tomorrow": {
+          "type": "array",
+          "items": { "$ref": "https://rd-harness/schemas/kanban-task.schema.json" },
+          "description": "明日截止的任务"
+        },
+        "day_after": {
+          "type": "array",
+          "items": { "$ref": "https://rd-harness/schemas/kanban-task.schema.json" },
+          "description": "后天截止的任务"
+        },
+        "unscheduled": {
+          "type": "array",
+          "items": { "$ref": "https://rd-harness/schemas/kanban-task.schema.json" },
+          "description": "无截止日期的任务"
+        }
+      }
+    }
+  }
+}

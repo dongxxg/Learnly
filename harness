@@ -6,18 +6,18 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# 此入口会下发到目标环境；目标可能只装了单一后端目录（.claude/.codex/.codebuddy/.qoder），
+# 此入口会下发到目标环境；目标可能只装了单一后端目录（.claude/.codex/.codebuddy/.qoder/.zcode/.dsh），
 # 写死 .claude 在非 claude 环境会找不到脚本。优先 HARNESS_BACKEND 指定目录，否则探测首个含 setup 脚本的后端。
 SETUP=""
-for _d in ".${HARNESS_BACKEND:-__none__}" .claude .codex .codebuddy .qoder; do
+for _d in ".${HARNESS_BACKEND:-__none__}" .claude .codex .codebuddy .qoder .zcode .dsh; do
   if [ -f "$SCRIPT_DIR/$_d/tools/scripts/setup/setup-harness.sh" ]; then
     SETUP="$SCRIPT_DIR/$_d/tools/scripts/setup/setup-harness.sh"
     break
   fi
 done
 if [ -z "$SETUP" ]; then
-  echo "harness: 未找到 setup 脚本（已查 .claude/.codex/.codebuddy/.qoder 下 tools/scripts/setup/setup-harness.sh）" >&2
-  echo "  可设置 HARNESS_BACKEND=claude|codex|codebuddy|qoder 指定后端" >&2
+  echo "harness: 未找到 setup 脚本（已查 .claude/.codex/.codebuddy/.qoder/.zcode/.dsh 下 tools/scripts/setup/setup-harness.sh）" >&2
+  echo "  可设置 HARNESS_BACKEND=claude|codex|codebuddy|qoder|zcode|dsh 指定后端" >&2
   exit 1
 fi
 

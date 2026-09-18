@@ -1,0 +1,88 @@
+{
+  "source": {
+    "rootDir": ".claude",
+    "settings": ".claude/settings.json"
+  },
+  "targets": {
+    "codebuddy": {
+      "rootDir": ".codebuddy",
+      "backend": "codebuddy",
+      "configFormat": "json",
+      "configFile": ".codebuddy/settings.json",
+      "denyFormat": "array",
+      "hookFormat": "claude-json",
+      "skillMode": "copy",
+      "env": {
+        "HARNESS_BACKEND": "codebuddy",
+        "HARNESS_ROOT": ".codebuddy",
+        "HOOK_DENY_EXIT": "2",
+        "HARNESS_USAGE_DIR": "$HOME/.codebuddy/usage",
+        "HARNESS_PROJECTS_DIR": "$HOME/.codebuddy/projects"
+      }
+    },
+    "qoder": {
+      "rootDir": ".qoder",
+      "backend": "qoder",
+      "configFormat": "json",
+      "configFile": ".qoder/settings.json",
+      "denyFormat": "array",
+      "hookFormat": "qoder-json",
+      "skillMode": "copy",
+      "env": {
+        "HARNESS_BACKEND": "qoder",
+        "HARNESS_ROOT": ".qoder",
+        "HOOK_DENY_EXIT": "2",
+        "HARNESS_USAGE_DIR": "$HOME/.qoder-cn/usage",
+        "HARNESS_PROJECTS_DIR": "$HOME/.qoder-cn/projects"
+      }
+    },
+    "zcode": {
+      "rootDir": ".zcode",
+      "backend": "zcode",
+      "configFormat": "json",
+      "configFile": ".zcode/.zcode-plugin/plugin.json",
+      "marketplaceFile": ".zcode/marketplace.json",
+      "hooksFile": ".zcode/hooks/hooks.json",
+      "hookFormat": "zcode-plugin",
+      "skillMode": "copy",
+      "env": {
+        "HARNESS_BACKEND": "zcode",
+        "HARNESS_ROOT": ".zcode",
+        "HOOK_DENY_EXIT": "2"
+      }
+    },
+    "codex": {
+      "rootDir": ".codex",
+      "backend": "codex",
+      "configFormat": "toml",
+      "configFile": ".codex/config.toml",
+      "hooksFile": ".codex/hooks.json",
+      "rulesFile": ".codex/rules/default.rules",
+      "denyFormat": "prefix_rule",
+      "hookFormat": "codex-json",
+      "skillMode": "copy",
+      "env": {
+        "HARNESS_BACKEND": "codex",
+        "HARNESS_ROOT": ".codex",
+        "HOOK_DENY_EXIT": "2",
+        "HARNESS_USAGE_DIR": "$HOME/.codex/usage",
+        "HARNESS_PROJECTS_DIR": "$HOME/.codex/projects"
+      }
+    },
+    "dsh": {
+      "rootDir": ".dsh",
+      "backend": "dsh",
+      "configFormat": "json",
+      "configFile": ".dsh/settings.json",
+      "hookFormat": "claude-json",
+      "skillMode": "copy",
+      "env": {
+        "HARNESS_BACKEND": "dsh",
+        "HARNESS_ROOT": ".dsh",
+        "HOOK_DENY_EXIT": "2",
+        "HARNESS_USAGE_DIR": "$HOME/.dsh/usage",
+        "HARNESS_PROJECTS_DIR": "$HOME/.dsh/projects"
+      }
+    }
+  }
+}

@@ -1,0 +1,2 @@
+{"ts":"2026-07-07T11:00:00Z","session_id":"sess-1","role":"developer","trigger":"natural","backend":"claude","started_at":"2026-07-07T11:00:00Z","completed_at":"2026-07-07T11:05:00Z","duration_ms":300000,"tokens":{"input":2000,"output":200,"cache_read":1000,"cache_creation":0,"model":"claude-sonnet-4-6"}}
+{"ts":"2026-07-07T11:10:00Z","session_id":"sess-2","role":"architect","trigger":"natural","backend":"codex","started_at":"2026-07-07T11:10:00Z","completed_at":"2026-07-07T11:15:00Z","duration_ms":300000,"tokens":{"total":15000}}

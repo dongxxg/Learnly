@@ -1,0 +1,141 @@
+{
+  "env": {
+    "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "88",
+    "HARNESS_ROOT": ".claude"
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "node \"E:/codes/MyReps/Learnly/.claude/tools/scripts/statusline/statusline-command.cjs\"",
+    "refreshInterval": 60
+  },
+  "permissions": {
+    "allow": [
+      "Bash(git add *)",
+      "Bash(git commit -m *)",
+      "Bash(git rm *)",
+      "Edit(*)",
+      "Write(*)",
+      "Bash(sed *)"
+    ],
+    "deny": [
+      "Bash(rm -rf /)",
+      "Bash(rm -rf /*)",
+      "Bash(rm -rf ~)",
+      "Bash(rm -rf ~/*)",
+      "Bash(mkfs*)",
+      "Bash(dd if=* of=/dev/*)",
+      "Bash(chmod -R 777 /)",
+      "Bash(chown -R * /)",
+      "Bash(shutdown *)",
+      "Bash(reboot *)",
+      "Bash(init 0*)",
+      "Bash(init 6*)",
+      "Bash(git push *--force*)",
+      "Bash(git push *-f *)",
+      "Bash(git reset --hard *)",
+      "Bash(git checkout -- .)",
+      "Bash(git restore .)",
+      "Bash(git clean -f *)",
+      "Bash(git merge *)"
+    ],
+    "defaultMode": "bypassPermissions"
+  },
+  "skipDangerousModePermissionPrompt": true,
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -f .harness/.framework-edit ] || { [ -f .claude/reference/harness-rules.md ] && .claude/hooks/shared/pre-tool-use-git-guard.sh || true; }"
+          },
+          {
+            "type": "command",
+            "command": "[ -f .harness/.framework-edit ] || { [ -f .claude/reference/harness-rules.md ] && .claude/hooks/shared/pre-tool-use-tasks-guard.sh || true; }"
+          },
+          {
+            "type": "command",
+            "if": "Bash(git commit *)",
+            "command": "[ -f .harness/.framework-edit ] || { [ -f .claude/reference/harness-rules.md ] && .claude/hooks/shared/pre-commit-state-check.sh || true; }"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -f .harness/.framework-edit ] || { [ -f .claude/reference/harness-rules.md ] && .claude/hooks/shared/pre-tool-use-memory-route-guard.sh || true; }"
+          }
+        ]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -f .harness/.framework-edit ] || { [ -f .claude/reference/harness-rules.md ] && .claude/hooks/shared/pre-tool-use-memory-route-guard.sh || true; }"
+          }
+        ]
+      },
+      {
+        "matcher": "Task|Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/shared/pre-tool-use-agent-timestamp.sh || true"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -f .claude/reference/harness-rules.md ] && .claude/hooks/shared/session-start.sh || true"
+          },
+          {
+            "type": "command",
+            "command": "[ -f .claude/tools/scripts/maintenance/cleanup-orphan-worktrees.mjs ] && node .claude/tools/scripts/maintenance/cleanup-orphan-worktrees.mjs --quiet || true"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -f .claude/hooks/shared/check-upgrade-prompt.sh ] && .claude/hooks/shared/check-upgrade-prompt.sh || true"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/shared/post-tool-use-agent-usage.sh || true"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/shared/stop-main-session-usage.sh || true",
+            "timeout": 20
+          }
+        ]
+      }
+    ]
+  }
+}

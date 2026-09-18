@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rd-harness/schemas/kanban-task.schema.json",
+  "title": "Kanban Task",
+  "description": "单个看板任务的原子定义。所有消费端（看板镜像 JSON、日报 kanban 段、deadline 日历）通过 $ref 复用此定义，避免字段名漂移。",
+  "type": "object",
+  "required": ["id", "task", "owner", "deadline", "status", "sprint", "main_chain", "notes", "urgency"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "任务编号，如 'S0-01'、'H-06'、'PA-01'、'D-12a'"
+    },
+    "task": {
+      "type": "string",
+      "minLength": 1,
+      "description": "任务描述"
+    },
+    "owner": {
+      "type": "string",
+      "description": "任务负责人（原始字符串，可能含多 owner 拼接，如 '张三+李四'）。对应 owners[0] 的归一化形式用 '+' 拼接"
+    },
+    "owners": {
+      "type": "array",
+      "description": "拆分 owner 字符串得到的负责人数组",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "deadline": {
+      "type": "string",
+      "description": "截止日期，格式 'M/D' 如 '6/15'，或 'YYYY-MM-DD'，或日期范围 'M/D-M/D'"
+    },
+    "status": {
+      "type": "string",
+      "description": "状态 emoji + 文字，如 '✅ 已完成'、'🔵 进行中'、'🟡 有风险'、'🔴 阻塞'、'⬜ 未开始'"
+    },
+    "sprint": {
+      "type": "string",
+      "description": "所属 Sprint，归一化为 'Sprint N' 形式（如 'Sprint 0'）。非 Sprint 章节（风险登记簿等）为空串"
+    },
+    "main_chain": {
+      "type": "string",
+      "description": "所属主链/子章节标题，来自 md 的 ### 标题"
+    },
+    "notes": {
+      "type": "string",
+      "description": "备注内容"
+    },
+    "urgency": {
+      "type": "string",
+      "description": "紧急度/优先级，如 '高'、'中'、'低'。无紧急度列时为空串"
+    },
+    "is_risk": {
+      "type": "boolean",
+      "description": "可选标记：任务位于风险登记簿等非 Sprint 章节。下游可据此过滤非正式任务"
+    }
+  }
+}

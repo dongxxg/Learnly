@@ -1,0 +1,66 @@
+# Uni-AURI CI Template — push-pipeline.yml
+# 触发：push（非默认分支）/ merge_request_event
+# 流程：detect → test
+# 注意：check / coverage 由 check-build.yml 提供（setup-project.py 默认 include）
+
+# ── CI 变量（可在项目 CI/CD Settings 中覆盖） ──────────────
+variables:
+  # MR 缺少 Closes #N 时是否自动创建轻量级 Issue（mr-validate job 使用）
+  # 默认关闭：避免无 Issue 的 MR 被自动创建 issue 污染 Issue 列表
+  MR_AUTO_CREATE_ISSUE: "false"
+
+# ── S1: 变更检测 ──────────────────────────────────────
+detect-changes:
+  stage: detect
+  image: $BUILD_IMAGE
+  script:
+    - bash .claude/tools/scripts/ci-detect-changes.sh detect-env.txt
+    - |
+      if [ -n "${ISSUE_IID:-}" ] && [ "${CI_PIPELINE_SOURCE}" = "api" ]; then
+        echo "ISSUE_IID=${ISSUE_IID}" >> detect-env.txt
+        echo "[detect] ISSUE_IID=${ISSUE_IID} from webhook trigger"
+      fi
+  artifacts:
+    paths:
+      - detect-env.txt
+    expire_in: 1 day
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+
+# ── T1: 测试执行 ─────────────────────────────────────
+test:
+  stage: test
+  image: $BUILD_IMAGE
+  needs:
+    - detect-changes
+  script:
+    - source detect-env.txt
+    - |
+      if [ "${CODE_CHANGED}" != "1" ]; then
+        echo "[Test] No code changes, skipping"
+        echo "PASS" > test-result.txt
+        exit 0
+      fi
+    - |
+      if [ -z "${TEST_CMD}" ]; then
+        echo "[Test] TEST_CMD not configured, skipping (set TEST_CMD in project variables to enable)"
+        echo "SKIP" > test-result.txt
+        exit 0
+      fi
+    - 'echo "[Test] Running: ${TEST_CMD}"'
+    - |
+      if ${TEST_CMD}; then
+        echo "PASS" > test-result.txt
+        echo "[Test] PASSED"
+      else
+        echo "FAIL" > test-result.txt
+        echo "[Test] FAILED"
+        exit 1
+      fi
+  artifacts:
+    paths:
+      - test-result.txt
+    expire_in: 1 day
+    when: always
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"

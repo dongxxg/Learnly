@@ -1,0 +1,24 @@
+# Uni-AURI CI Template — base.yml
+# 包含：stages、全局变量
+# 用法：子项目 include 此文件 + 语言模板 + check-build.yml + push-pipeline.yml
+# 所有配置通过变量驱动，子项目在 variables 中覆盖即可自定义
+
+stages:
+  - detect
+  - check
+  - test
+  - merge
+
+variables:
+  # 构建镜像：由语言模板覆盖，子项目也可再次覆盖
+  BUILD_IMAGE: "hub.unitechs.com/public/gitlab/gitlab-runner-all-in-one:20250509"
+  # 静态检查命令：留空则 check job 跳过
+  CHECK_CMD: ""
+  TEST_CMD: ""
+  # per-job 额外变量（子项目按需覆盖，如 Java 的 MAVEN_OPTS）
+  CHECK_JOB_VARS: ""
+  TEST_JOB_VARS: ""
+  # 覆盖率门禁（子项目按需覆盖 COVERAGE_CMD 启用）
+  # COVERAGE_CMD 应为纯解析命令，复用 TEST_CMD 已产出的覆盖率数据，不重跑测试
+  COVERAGE_CMD: ""
+  COVERAGE_THRESHOLD: 60

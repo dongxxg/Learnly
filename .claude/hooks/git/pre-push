@@ -1,0 +1,193 @@
+#!/usr/bin/env bash
+# pre-push hook: PM 推送审批令牌门禁（Challenge-Response 机制）+ behind 检查
+# 令牌必须匹配 Hook 生成的挑战码，AI 无法预知挑战码
+# CI 环境通过 CLAUDE_PUSH_AUTO_APPROVE=1 自动批准
+#
+# 输入: git 通过 stdin 传递推送信息（每行: local-ref local-sha remote-ref remote-sha）
+
+set -euo pipefail
+
+# ============================================================
+# 配置常量（与 harness-rules.yaml → constraints.git.push_approval.security 对齐）
+# ============================================================
+# 挑战码有效期（秒）；single_use，审批通过即清理。
+# 改此值须同步：权威源 ttl_seconds + 下方过期提示文案的分钟数。
+PUSH_TTL_SECONDS=300
+
+# 读取推送信息（不使用，仅消费 stdin）
+cat >/dev/null
+
+PROJECT_DIR="${QODER_PROJECT_DIR:-${CLAUDE_PROJECT_DIR:-.}}"
+cd "$PROJECT_DIR"
+
+# 仓库根目录。审批 marker 文件统一放在 .harness/（项目级状态目录）。
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || echo .)"
+
+# CI 自动批准
+if [ "${CLAUDE_PUSH_AUTO_APPROVE:-}" = "1" ]; then
+    exit 0
+fi
+
+# ============================================================
+# Behind / 分叉检查（详见 ai-git-commit-spec.md「操作顺序」）
+# ============================================================
+# behind = 远端存在而本地没有的 commit。必须区分两种形态（Issue !284）：
+#   ① 真落后（behind>0 且 ahead=0）：本地无新工作，push 必然 non-FF 被服务端拒
+#      → 拒绝并引导 git pull --rebase，防被拒后误用 --force。
+#   ② 分叉（behind>0 且 ahead>0）：两侧各有提交，典型形态是个人分支 rebase 重写
+#      历史。ai-git-commit-spec 允许个人分支 --force-with-lease（lease 自身保证
+#      「远端有新提交则推送失败」），一刀切拒绝会堵死该合规路径 → 放行进挑战码审批。
+#      共享分支（main/master/release/*，以及与个人命名同形的团队分支——由 PM 用
+#      git config harness.shared-branches 声明）重写历史是红线 → 维持拒绝。
+# fetch 10 秒超时；失败（如离线）则跳过检查（fail-open，不阻塞 push）。
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+if [ -n "$CURRENT_BRANCH" ] && [ "$CURRENT_BRANCH" != "HEAD" ]; then
+    _FETCH_OUT=$(timeout 10 git fetch --quiet 2>&1 || echo "")
+    if [ -z "$_FETCH_OUT" ]; then
+        # @{u}=upstream；HEAD..@{u} 计数为远端领先本地的 commit 数
+        _BEHIND=$(git rev-list --count HEAD..@{u} 2>/dev/null || echo "0")
+        if [ "$_BEHIND" -gt 0 ] 2>/dev/null; then
+            _AHEAD=$(git rev-list --count @{u}..HEAD 2>/dev/null || echo "0")
+            _IS_SHARED=0
+            case "$CURRENT_BRANCH" in
+                main|master|release/*) _IS_SHARED=1 ;;
+            esac
+            # feature/930 这类「与个人分支命名同形的团队分支」需 PM 显式声明，
+            # glob 列表逗号分隔：git config harness.shared-branches "feature/930,feature/830"
+            _SHARED_CFG=$(git config --get harness.shared-branches 2>/dev/null || echo "")
+            if [ -n "$_SHARED_CFG" ]; then
+                IFS=',' read -ra _SHARED_PATS <<< "$_SHARED_CFG"
+                for _pat in "${_SHARED_PATS[@]}"; do
+                    _pat="${_pat# }"; _pat="${_pat% }"
+                    # shellcheck disable=SC2053  # 右侧不加引号 = 有意 glob 匹配
+                    [[ -n "$_pat" && "$CURRENT_BRANCH" == $_pat ]] && _IS_SHARED=1
+                done
+            fi
+            if [ "$_AHEAD" -gt 0 ] && [ "$_IS_SHARED" -eq 0 ]; then
+                echo "   ⚠️  本地与远端历史分叉（远端独有 ${_BEHIND} / 本地独有 ${_AHEAD}），判定为个人分支重写历史。"
+                echo "   已按 ai-git-commit-spec 个人分支 --force-with-lease 路径放行，继续挑战码审批。"
+            elif [ "$_AHEAD" -gt 0 ]; then
+                echo "   共享分支 ${CURRENT_BRANCH} 与远端分叉（本地独有 ${_AHEAD} 个重写 commit），禁止 push"
+                echo "   禁止重写共享分支历史（红线）；请执行: git pull --rebase 后正常 push"
+                echo "   确需重写共享分支由 PM 终端人工操作"
+                exit 1
+            else
+                echo "   本地落后远端 ${_BEHIND} 个 commit，禁止 push"
+                echo "   请执行: git pull --rebase"
+                echo "   处理冲突后: git rebase --continue → 重新 push"
+                echo "   禁止用 git push --force 解决 non-fast-forward"
+                exit 1
+            fi
+        fi
+    fi
+fi
+
+CHALLENGE_FILE=".harness/.push-challenge"
+TOKEN_FILE=".harness/.push-approved"
+
+SHORT_HASH=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+COMMIT_SUBJECT=$(git log -1 --format="%s" 2>/dev/null || echo "unknown")
+
+# 取文件 mtime（秒），跨平台双兜底：GNU stat -c %Y / BSD stat -f %m
+file_mtime() {
+    stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null || echo 0
+}
+
+# TTL 检查：超过 PUSH_TTL_SECONDS 视为过期
+is_expired() {
+    local file="$1"
+    local max_age="${2:-$PUSH_TTL_SECONDS}"
+    local mtime
+    mtime=$(file_mtime "$file")
+    local now
+    now=$(date +%s)
+    local age=$(( now - mtime ))
+    [ "$age" -gt "$max_age" ]
+}
+
+# 输出 PM 审批提示。$1=挑战码(nonce)；提示方式对齐 harness-rules.yaml push_approval。
+print_approval_hint() {
+    local nonce="$1"
+    echo "   PM 审批方式（二选一）:"
+    echo "   1. 手动: echo ${nonce} > .harness/.push-approved && git push"
+    echo "   2. 自动: 回复 AI '批准推送'，AI 自动写入 token 并重推"
+    echo "   ⚠️ push 完成前不得创建新 commit（否则挑战码失效）。"
+}
+
+# 两个文件都存在，尝试匹配
+if [ -f "$CHALLENGE_FILE" ] && [ -f "$TOKEN_FILE" ]; then
+    CHALLENGE_CONTENT=$(cat "$CHALLENGE_FILE" 2>/dev/null || true)
+    TOKEN_CONTENT=$(cat "$TOKEN_FILE" 2>/dev/null || true)
+
+    CHALLENGE_NONCE=$(echo "$CHALLENGE_CONTENT" | cut -d: -f1)
+    CHALLENGE_HASH=$(echo "$CHALLENGE_CONTENT" | cut -d: -f2)
+
+    if is_expired "$CHALLENGE_FILE" "$PUSH_TTL_SECONDS"; then
+        rm -f "$CHALLENGE_FILE" "$TOKEN_FILE"
+        echo "   挑战码已过期（>5分钟），已清除。"
+        echo "   请重新执行 git push 触发新挑战码，PM 批准后再推。"
+        exit 1
+    fi
+
+    if [ "$TOKEN_CONTENT" = "$CHALLENGE_NONCE" ]; then
+        if [ "$CHALLENGE_HASH" = "$SHORT_HASH" ]; then
+            # 审批通过，清理文件
+            rm -f "$CHALLENGE_FILE" "$TOKEN_FILE"
+            exit 0
+        else
+            rm -f "$CHALLENGE_FILE" "$TOKEN_FILE"
+            echo "   HEAD 已变更（${CHALLENGE_HASH} → ${SHORT_HASH}），审批失效。"
+            echo "   请重新执行 git push 触发新挑战码。"
+            exit 1
+        fi
+    else
+        rm -f "$TOKEN_FILE"
+        echo "   令牌与挑战码不匹配，已删除。"
+        echo "   推送需要审批: ${COMMIT_SUBJECT}"
+        echo "   HEAD: ${SHORT_HASH}  挑战码: ${CHALLENGE_NONCE}"
+        echo ""
+        print_approval_hint "$CHALLENGE_NONCE"
+        exit 1
+    fi
+fi
+
+# 只有令牌没有挑战码 → 非法
+if [ -f "$TOKEN_FILE" ] && [ ! -f "$CHALLENGE_FILE" ]; then
+    rm -f "$TOKEN_FILE"
+    echo "   挑战码已失效（无对应挑战码文件），已清除令牌。"
+    echo "   请重新执行 git push 触发新挑战码。"
+    exit 1
+fi
+
+# 挑战码存在且未过期且无令牌 → 提示先写 token
+if [ -f "$CHALLENGE_FILE" ] && ! is_expired "$CHALLENGE_FILE" "$PUSH_TTL_SECONDS"; then
+    CHALLENGE_CONTENT=$(cat "$CHALLENGE_FILE" 2>/dev/null || true)
+    CHALLENGE_NONCE=$(echo "$CHALLENGE_CONTENT" | cut -d: -f1)
+    CHALLENGE_HASH=$(echo "$CHALLENGE_CONTENT" | cut -d: -f2)
+
+    if [ "$CHALLENGE_HASH" != "$SHORT_HASH" ]; then
+        rm -f "$CHALLENGE_FILE"
+        # fall through：继续向下生成新挑战码
+    else
+        echo "   推送需要审批: ${COMMIT_SUBJECT}"
+        echo "   HEAD: ${SHORT_HASH}  挑战码: ${CHALLENGE_NONCE}"
+        echo ""
+        print_approval_hint "$CHALLENGE_NONCE"
+        exit 1
+    fi
+fi
+
+# 生成新挑战码
+rm -f "$CHALLENGE_FILE" 2>/dev/null || true
+
+# 生成 8 位 hex 挑战码（4 字节随机）。od -An 去地址段，tr 去空白，留纯 hex。
+NONCE=$(od -An -tx1 -N4 /dev/urandom | tr -d ' \n')
+TIMESTAMP=$(date +%s)
+
+echo "${NONCE}:${SHORT_HASH}:${TIMESTAMP}" > "$CHALLENGE_FILE"
+
+echo "   推送需要审批: ${COMMIT_SUBJECT}"
+echo "   HEAD: ${SHORT_HASH}  挑战码: ${NONCE}"
+echo ""
+print_approval_hint "$NONCE"
+exit 1

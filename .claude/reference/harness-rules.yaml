@@ -1,0 +1,1242 @@
+# Uni-AURI 协作规则（机器可读版）
+# 本文件是 harness-rules.md 的结构化执行摘要，供 AI Agent 精确解析。
+# 人类可读的上下文、反模式示例、设计决策历史保留在 harness-rules.md 中。
+# 规则冲突时以本文件（YAML）为准。harness-rules.md 仅提供人类可读的上下文（反模式、设计决策历史等）。
+
+version: "1.0"
+source: harness-rules.md
+
+# =============================================================================
+# 1. 角色调度表
+# =============================================================================
+
+roles:
+  pm:
+    trigger: external
+    authority: final_decision, veto_debate, trigger_debate
+
+  architect:
+    trigger: main_session_dispatch
+    config: agents/architect.md
+    responsibilities: [system_design, tech_spec, spec_lifecycle, adr]
+
+  developer:
+    trigger: main_session_dispatch
+    config: agents/developer.md
+    responsibilities: [implementation, unit_test]
+    coverage: "> 80%, core modules 100% incremental"
+
+  tester:
+    trigger: main_session_dispatch
+    config: agents/tester.md
+    responsibilities: [integration_test, regression_test, e2e_test]
+
+  reviewer:
+    trigger: main_session_dispatch
+    config: agents/reviewer.md
+    responsibilities: [code_review, doc_quality, ux_evaluation]
+
+  debate:
+    trigger: "75 <= weighted_score < 80 or pm_trigger"
+    config: agents/debate.md
+    sub_roles:
+      defender:
+        stance: defend
+        dimensions: [completeness, feasibility, cost_benefit, risk_control, urgency]
+        constraint: independent_context, unaware_of_attack
+      attacker:
+        stance: attack
+        constraint: sees_defender_output_first, independent_context
+      adjudicator:
+        role: main_session
+        stance: neutral
+        bias: strict
+    time_limit_minutes: 13
+    applicable_roles: [debate]
+
+# =============================================================================
+# 2. 退出状态决策树
+# =============================================================================
+
+exit_states:
+  DONE:
+    meaning: "all complete, verified"
+    action: advance_to_next_role
+
+  DONE_WITH_CONCERNS:
+    meaning: "complete with non-blocking concerns (P1/P2/observational); blocking only when an open P0 exists"
+    action:
+      - condition: "open P0 count == 0"
+        action: log_then_advance
+      - condition: "open P0 count > 0"
+        action: resolve_before_advance   # next_action: evaluate_concerns, needs_pm: true
+    hard_rule: "auto-promoted only when no open P0 in concerns.json; P1/P2 handled by code-review scoring (P1<=2 conditional pass), not by advance routing"
+
+  NEEDS_PM:
+    meaning: "can continue but a decision requires PM (ambiguity / tradeoff / explicit Worker request)"
+    action: pause_and_request_pm_evaluation   # next_action: evaluate_concerns, needs_pm: true
+    hard_rule: "does NOT increment blocked_count; distinct from BLOCKED. Stays on current phase."
+
+  NEEDS_CONTEXT:
+    meaning: "needs more information"
+    action: provide_context_then_redispatch_same_role
+
+  BLOCKED:
+    meaning: "cannot complete"
+    action:
+      - condition: "reason == context_issue"
+        action: supplement_context_then_retry
+      - condition: "reason == task_too_large"
+        action: split_task
+      - condition: "reason == spec_or_plan_issue"
+        action: escalate_to_pm
+    circuit_breaker:
+      max_retries: 3
+      after_max: "escalate_to_pm with split_recommendation"
+    hard_rule: "never treat as DONE"
+
+# =============================================================================
+# 3. 工作流管线
+# =============================================================================
+
+workflow:
+  pipeline:
+    - step: 1
+      action: "pm_issue_instruction with acceptance_criteria"
+      executor: pm
+      precondition: none
+    - step: 2
+      action: "TaskCreate with acceptance_criteria (required)"
+      executor: main_session
+      precondition: "step 1 complete, acceptance_criteria present"
+    - step: 3
+      action: "load project context from Memory"
+      executor: main_session
+      precondition: "step 2 complete"
+    - step: 4
+      action: "dispatch Architect (if needed)"
+      executor: main_session
+      condition: "task requires design"
+      precondition: "step 3 complete"
+      exit_required: "DONE or DONE_WITH_CONCERNS"
+      quality_gate: QG-ARCH-001
+    - step: 5
+      action: "TDD compliance check"
+      executor: main_session
+      precondition: "step 4 DONE (or skipped with reason recorded)"
+      must_complete_before: dispatch_developer
+    - step: 6
+      action: "dispatch Developer"
+      executor: main_session
+      precondition: "step 5 complete, SPEC status == approved"
+      exit_required: "DONE or DONE_WITH_CONCERNS"
+      quality_gate: QG-DEV-001
+    - step: 7
+      action: "dispatch Tester"
+      executor: main_session
+      precondition: "step 6 DONE, developer_changed_files available"
+      exit_required: "DONE or DONE_WITH_CONCERNS"
+    - step: 8
+      action: "review pipeline"
+      executor: main_session
+      precondition: "step 7 DONE (or step 6 DONE_WITH_CONCERNS with observational concern only)"
+      quality_gates: [QG-REV-001, QG-REV-002]
+
+  tdd_check:
+    description: "Main session must execute before dispatching Developer"
+    bypass_signals:
+      - "PM provided existing implementation code (paste or file path)"
+      - "PM says: only-add-tests / don't-touch-code / code-in-production / no-test-needed"
+      - "PM explicitly requests skipping TDD"
+    decision_tree:
+      - condition: "bypass_signal_detected"
+        action: inform_pm
+        message: "TDD Iron Law suggests write tests first. Delete impl and redo? (~10-15 min extra)"
+        branches:
+          - condition: "pm_agrees"
+            action: normal_dispatch_developer
+          - condition: "pm_refuses"
+            action: dispatch_developer_with_injection
+            injection: "TDD_BYPASS: PM acknowledged TDD Iron Law but declined. Add tests + report DONE_WITH_CONCERNS."
+            one_time_only: true
+      - condition: "no_bypass_signal"
+        action: normal_dispatch_developer
+
+  tester_dispatch:
+    description: "Main session must execute before dispatching Tester"
+    pre_checks:
+      - "Developer reported DONE or DONE_WITH_CONCERNS"
+      - "Test module scope defined (integration / regression / e2e)"
+      - "Contract test update needed if interface changed"
+    dispatch_must_include:
+      - module_name
+      - spec_file_path
+      - developer_changed_files
+      - integration_test_scope: "critical interfaces list"
+      - regression_strategy: "associated historical bug IDs"
+      - e2e_scenarios: "if applicable, coordinate with frontend engineer"
+    deliverables:
+      - test_report: "pass/fail/skip stats"
+      - coverage_report: "coverage metrics"
+      - bug_list: "severity + reproduction steps"
+
+# =============================================================================
+# 4. 评分体系
+# =============================================================================
+
+scoring:
+  weights:
+    architect: 0.25
+    reviewer: 0.40
+    tester: 0.35
+
+  thresholds:
+    # 权威来源：此定义为唯一权威，其他文件以此为准
+    - condition: "p0_count > 0"
+      action: reject
+      label: "P0 veto, score reset to 0, rework"
+      severity: critical
+    - condition: "score >= 90"
+      action: pass
+      label: "direct pass, submit to PM"
+    - condition: "80 <= score < 90 and p1_count <= 2"
+      action: conditional_pass
+      label: "Reviewer fixes non-P0 issues then pass"
+    - condition: "80 <= score < 90 and p1_count > 2"
+      action: rework
+      label: "P1 exceeds quota (max 2), Developer fixes P1 to <= 2 then re-review; re-review score falls into normal threshold routing"
+    - condition: "75 <= score < 80"
+      action: trigger_debate
+      label: "debate required"
+    - condition: "score < 75"
+      action: rework
+      label: "direct rework, no debate"
+
+  debate_scoring:
+    p0_short_circuit: "check P0 FIRST; if any P0 found, skip scoring → immediate veto"
+    formula: "final_score = original_score * 0.4 + debate_score * 0.6"
+    debate_score_calc:
+      formula_explicit: "debate_score = 50 + (defender_effective * 5, max +30) - (attacker_effective * 8, max -40) - (p0_count * 50)"
+      base: 50
+      defender_effective_args:
+        operation: ADD
+        per_point: 5
+        cap: 30
+      attacker_effective_rebuttals:
+        operation: SUBTRACT
+        per_point: 8
+        cap: 40
+      p0_fatal_flaws:
+        operation: SUBTRACT
+        per_point: 50
+      clamp: [0, 100]
+    validity_criteria:
+      effective_argument:
+        - "cites specific code location or SPEC clause"
+        - "has data or logic support"
+        - "stays within review scope"
+      ineffective_argument:
+        - "pure subjective judgment"
+        - "no concrete evidence"
+        - "deviates from review scope"
+      effective_rebuttal:
+        - "points out factual error or logical flaw in defender's argument"
+        - "provides alternative evidence or solution"
+      ineffective_rebuttal:
+        - "disagrees without basis"
+        - "argues unrelated technical preferences"
+    verdict_thresholds:
+      - condition: "p0_found"
+        action: veto
+        label: "regardless of score"
+      - condition: "final_score >= 80"
+        action: pass
+      - condition: "75 <= final_score < 80"
+        action: conditional_pass
+        label: "list mandatory conditions (P0/P1 priority)"
+      - condition: "final_score < 75"
+        action: block
+        label: "rework with scope and target role"
+
+  rework_routing:
+    table:
+      - dimension: architecture/design/tech_spec
+        target: architect
+      - dimension: code/implementation
+        target: developer
+      - dimension: test/coverage
+        target: tester
+      - dimension: security
+        target: [architect, developer]
+      - dimension: doc/ux_quality
+        target: architect
+    must_record: [dimension, target_role, fix_standard]
+
+# =============================================================================
+# 5. 质量门禁
+# =============================================================================
+
+quality_gates:
+  gates:
+    - id: QG-ARCH-001
+      stage: architect_complete
+      check: document_completeness
+      standard: "topology + interface + selection + tech_spec"
+    - id: QG-DEV-001
+      stage: developer_complete
+      check: code_quality
+      standard: "coverage >= 80% (configurable, CI default 60%) + linter zero error"
+    - id: QG-REV-001
+      stage: reviewer_complete
+      check: weighted_score
+      standard: "ref scoring.thresholds (authoritative)"
+    - id: QG-REV-002
+      stage: reviewer_complete
+      check: p0_issues
+      standard: "0 (P0 = veto)"
+  note: "ADR check covered by Reviewer scoring card (design.md Decisions: missing = P0). Integration test coverage ensured by Tester role, scored in review dimension 'test quality'."
+
+  hotfix:
+    description: "fast-path for production fixes, reduced gates"
+    trigger_conditions:
+      - "PM labels issue as hotfix or production-down"
+      - "existing branch matches hotfix/*"
+    skipped_roles: [architect, tester, debate]
+    skipped_gates: [QG-ARCH-001]
+    retained_gates: [QG-DEV-001, QG-REV-001, QG-REV-002]
+    scoring:
+      threshold: 70
+      weights:
+        developer: 0.40
+        reviewer: 0.60
+    pipeline:
+      - step: 1
+        action: "PM issue instruction with hotfix label"
+        executor: pm
+      - step: 2
+        action: "TDD compliance check (may be bypassed for production-down)"
+        executor: main_session
+      - step: 3
+        action: "dispatch Developer"
+        executor: main_session
+        quality_gates: [QG-DEV-001]
+      - step: 4
+        action: "dispatch Reviewer"
+        executor: main_session
+        quality_gates: [QG-REV-001, QG-REV-002]
+    post_merge:
+      - "retroactive integration test within 24h"
+      - "ADR if fix involves architectural decision"
+      - "incident report within 24h"
+
+# =============================================================================
+# 6. ADR 流程（架构决策记录）
+# =============================================================================
+
+adr:
+  storage: ".harness/adr/"
+  naming: "NNNN-title-with-dashes.md"
+  template_fields: [title, status, date, decision_drivers, considered_options, decision_outcome, consequences]
+
+  trigger_conditions:
+    - "cross-module interface change"
+    - "AI role definition modification"
+    - "security policy adjustment"
+    - "technology stack or dependency introduction"
+    - "one-way-door decision (difficult or impossible to reverse)"
+    - "CLAUDE.md modification"
+    - "performance budget adjustment"
+    - "data schema migration strategy"
+
+  approval_chain:
+    - role: architect
+      action: "draft ADR with considered_options and decision_outcome"
+    - role: reviewer
+      action: "review ADR for completeness and logical consistency"
+    - role: pm
+      action: "final approval or rejection with reason"
+
+  states:
+    proposed:
+      allowed_transitions: [accepted, rejected, deprecated]
+      executor: architect
+    accepted:
+      allowed_transitions: [deprecated, superseded]
+      locked: true
+    rejected:
+      allowed_transitions: []
+    deprecated:
+      allowed_transitions: [superseded]
+    superseded:
+      allowed_transitions: []
+      must_reference: "superseding ADR number"
+
+  integration_with_spec:
+    - "SPEC involving one-way-door decisions must reference ADR"
+    - "ADR acceptance unblocks related SPEC transition to approved"
+    - "ADR rejection blocks related SPEC, Architect must revise"
+
+# =============================================================================
+# 7. PM Override 协议
+# =============================================================================
+
+pm_override:
+  triggers:
+    - type: skip_reviewer
+      examples: ["不用审了", "直接合", "代码太少不用走流程"]
+    - type: downgrade_p0
+      examples: ["这个 P0 没那么严重", "先标记 P1 后面修"]
+    - type: lower_threshold
+      examples: ["这次 70 分就够了", "紧急情况通融一下"]
+    - type: skip_hard_gate
+      examples: ["先看代码质量，规范后面补"]
+    - type: skip_tdd
+      examples: ["只补测试", "不要动代码", "代码在生产环境"]
+    - type: emergency_bypass
+      examples: ["这是紧急的，直接走 hotfix"]
+
+  steps:
+    - step: 1
+      action: "detect PM bypass intent"
+      executor: main_session
+    - step: 2
+      action: "read back consequences to PM (MUST NOT execute directly)"
+      executor: main_session
+      output_template: "检测到门禁绕过：{gate_id}。目的：{gate_purpose}。确认越过？将记录到 commit message，标注 GATE_BYPASS。"
+      must_wait_for: pm_response
+    - step: 3
+      action: "wait for PM explicit confirmation"
+      executor: main_session
+      must_wait_for: pm_explicit_confirm
+    - step: 4
+      action: "mint NONCE via gate-bypass-mint.sh"
+      executor: main_session
+      command: "bash .claude/hooks/shared/gate-bypass-mint.sh <TASK-ID> <PM_ID> <GATE_ID> '<reason>'"
+      after: pm_explicit_confirm
+    - step: 5
+      action: "present token to PM, wait for '确认 {NONCE}'"
+      executor: main_session
+      must_wait_for: pm_nonce_confirm
+    - step: 6
+      action: "write approval token"
+      executor: main_session
+      command: "echo '{NONCE}' > .claude/.bypass-approved"
+      after: pm_nonce_confirm
+    - step: 7
+      action: "include GATE_BYPASS token in commit message"
+      executor: main_session
+    - step: 8
+      action: "commit-msg hook validates Challenge-Response（message 内 GATE_BYPASS:{NONCE} 单次消费，TTL 300s）"
+      executor: hook
+    - step: 9
+      action: "BLOCKED until step 3 completes"
+      executor: main_session
+      constraint: "must not execute bypass before PM confirms"
+
+  forbidden:
+    - "silent execution on first bypass mention"
+    - "polish or weaken bypass reason"
+    - "accept vague confirmation (过了/行吧/知道了) as explicit confirm"
+
+  audit:
+    - "full token in commit message, traceable via git log --grep GATE_BYPASS"
+    - "monthly count, threshold triggers architecture lead review"
+
+# =============================================================================
+# 8. 绝对约束
+# =============================================================================
+
+constraints:
+  git:
+    hard_rule: "Any AI session (main or worker) MAY git commit/add locally without extra approval. git push requires PM approval via challenge-response (applies to all sessions)."
+    main_session_push_requires: pm_challenge_response_approval
+    worker_push_requires: pm_challenge_response_approval
+    pm_veto_right: "anytime, irreversible"
+
+    push_approval:
+      mechanism: PreToolUse_Hook
+      challenge_response: true
+      steps:
+        - step: 1
+          action: "AI completes all local commits"
+        - step: 2
+          action: "AI executes git push (no token)"
+        - step: 3
+          action: "Hook intercepts, generates challenge, saves to .harness/.push-challenge, deny"
+          output: "challenge_code + commit_summary + file_stats"
+        - step: 4
+          action: "PM reviews deny output"
+        - step: 5
+          action: "PM replies '批准 {challenge}' or '推送 {challenge}'"
+        - step: 6
+          action: "AI creates token: echo '{challenge}' > .harness/.push-approved"
+        - step: 7
+          action: "AI re-pushes → Hook validates match + HEAD hash + expiry → pass → cleanup"
+        - step: 8
+          action: "Hook cd $CLAUDE_PROJECT_DIR → rm -f .harness/.push-challenge .harness/.push-approved → if rm fails, stderr warn but allow push"
+      security:
+        challenge_source: /dev/urandom
+        head_hash_binding: true
+        orphan_token_policy: delete_and_deny
+        ttl_seconds: 300
+        single_use: true
+        gitignored: true
+        cleanup:
+          on_phase_2_success: delete_both_files
+          cwd_fallback: CLAUDE_PROJECT_DIR_or_git_toplevel
+          failure_policy: warn_not_block
+      anti_self_approval:
+        - "MUST NOT read .harness/.push-challenge to get challenge code"
+        - "MUST NOT write .harness/.push-approved without PM explicit response"
+        - "MUST NOT automate challenge→approval pipeline via script"
+
+    branch_creation:
+      mechanism: PreToolUse_Hook_pre_tool_use_git_guard
+      scope: "creating new branches only (checkout -b/-B, switch -c/-C, branch <name>, worktree add -b); switching/deleting existing branches NOT restricted"
+      name_validation:
+        regex: '^(feature|fix|hotfix|refactor|docs|chore)/[a-z0-9]+([.-][a-z0-9]+)*(/[a-z0-9]+([.-][a-z0-9]+)*)*$'
+        authoritative_source: ai-git-commit-spec.md#分支命名规范
+        on_violation: deny_without_approval
+      challenge_response: true
+      steps:
+        - step: 1
+          action: "AI executes branch-creation command"
+        - step: 2
+          action: "Hook validates branch name; invalid → deny (no approval path)"
+        - step: 3
+          action: "Hook generates challenge (nonce bound to branch name), saves to .harness/.branch-challenge, deny"
+        - step: 4
+          action: "AI presents branch name + challenge code to PM"
+        - step: 5
+          action: "PM replies '批准 {challenge}'"
+        - step: 6
+          action: "AI writes token: echo '{challenge}' > .harness/.branch-approved"
+        - step: 7
+          action: "AI re-executes branch-creation command → Hook validates token + branch name match + expiry → pass → cleanup"
+      security:
+        challenge_source: /dev/urandom
+        branch_name_binding: true
+        ttl_seconds: 300
+        single_use: true
+        gitignored: true
+        ci_bypass_env: CLAUDE_BRANCH_AUTO_APPROVE
+        special_branches: "release/* etc. — PM creates manually in terminal"
+        cleanup:
+          on_phase_2_success: delete_both_files
+          on_session_start: delete_stale_files
+      anti_self_approval:
+        - "MUST NOT read .harness/.branch-challenge to get challenge code"
+        - "MUST NOT write .harness/.branch-approved without PM explicit response"
+        - "MUST NOT automate challenge→approval pipeline via script"
+
+    pre_commit_checklist:
+      - task_summary: "what and why"
+      - changed_files: "file list"
+      - quality_gate_status: "each check item"
+      - sensitive_file_scan: "no .env / keys / large binaries"
+      - commit_message_format: "compliant"
+
+    commit_format:
+      authoritative_source: ai-git-commit-spec.md
+      structure: "3-line via heredoc, hook-validated via sed -n '3p'"
+
+    operator_ids:
+      authoritative_source: ai-git-commit-spec.md
+
+  communication:
+    topology:
+      - "PM <-> main_session (bidirectional)"
+      - "Workers -> main_session (unidirectional report)"
+    hub: main_session
+    rule: "Workers MUST NOT communicate directly with each other"
+
+  spec_lifecycle:
+    storage: ".harness/spec/{module}/"
+    state_manager: architect
+    lock_on_approved: true
+    states:
+      draft:
+        description: "initial state, Architect exploring requirements"
+        allowed_transitions: [under_review]
+        executor: architect
+        entry_action: "rd:explore"
+        exit_criteria: "SPEC document covers topology + interface + selection + tech_spec (ref QG-ARCH-001)"
+      under_review:
+        description: "SPEC submitted for review"
+        allowed_transitions: [approved, draft]
+        executor: reviewer
+        entry_action: "rd:propose → dispatch Reviewer"
+        exit_criteria: "reviewer_score >= 80, p0_count == 0"
+        reject_transition:
+          target: draft
+          condition: "reviewer_score < 75 or p0_count > 0"
+          action: "Architect revises based on review feedback"
+      approved:
+        description: "SPEC locked, ready for implementation"
+        allowed_transitions: [implementing]
+        executor: architect
+        entry_action: "lock SPEC, notify main_session"
+        locked: true
+        exit_criteria: "PM or Architect triggers implementation"
+      implementing:
+        description: "Developer implementing per SPEC"
+        allowed_transitions: [testing, approved]
+        executor: developer
+        entry_action: "rd:apply → dispatch Developer"
+        exit_criteria: "Developer reports DONE, QG-DEV-001 passed"
+        reject_transition:
+          target: approved
+          condition: "SPEC needs revision discovered during implementation"
+          action: "escalate to main_session, Architect revises SPEC"
+      testing:
+        description: "Tester running integration/regression tests"
+        allowed_transitions: [reviewing, implementing]
+        executor: tester
+        entry_action: "dispatch Tester per workflow.tester_dispatch"
+        exit_criteria: "Tester reports DONE, all tests passed"
+        reject_transition:
+          target: implementing
+          condition: "test failures found"
+          action: "Developer fixes, re-dispatch Tester"
+      reviewing:
+        description: "Reviewer performing code review"
+        allowed_transitions: [archived, testing]
+        executor: reviewer
+        entry_action: "dispatch Reviewer per code-review-flow"
+        exit_criteria: "QG-REV-001/002 passed (score >= 80, p0 == 0)"
+        reject_transition:
+          target: testing
+          condition: "reviewer_score < 75 or p0_count > 0"
+          action: "route to rework per scoring.rework_routing"
+      archived:
+        description: "SPEC and implementation complete, archived"
+        allowed_transitions: []
+        executor: architect
+        entry_action: "rd:archive"
+        exit_criteria: "all gates passed, PM confirmed"
+
+  context_budget:
+    phase_definition: "single Worker dispatch (one developer dispatch, one reviewer dispatch, etc.)"
+    summary_limit: 500
+    summary_unit: characters
+    summary_timing: end_of_dispatch
+    summary_storage: memory_system
+    task_token_limit: 50000
+    token_scope: "input + output combined, measured via API response usage field. Includes system prompt + CLAUDE.md + rules overhead (~10-15K). Effective dispatch budget ~35-40K."
+    warning_threshold: 0.90
+    warning_action: "proactive cleanup of stale artifacts"
+    retention_priority: [latest_dispatch_output, review_scores, design_doc_summary, historical_artifacts]
+
+    dispatch_restrictions:
+      must_not_include:
+        - "其他 Worker 的原始对话历史"
+        - "超过 1 个 dispatch 前的中间产物详情"
+        - "与当前角色无关的调试过程"
+
+    dispatch_summary_template:
+      description: "所有 Worker dispatch 结束时必须产出标准摘要"
+      fields:
+        - name: 角色
+          required: true
+          description: "当前角色名称（Architect/Developer/Tester/Reviewer/Debate）"
+        - name: 任务
+          required: true
+          description: "一句话描述完成的任务"
+        - name: 产出
+          required: true
+          description: "关键交付物文件路径列表（非内容）"
+        - name: 质量指标
+          required: true
+          description: "评分/覆盖率/通过率等量化指标"
+        - name: 阻塞项
+          required: true
+          description: "未解决问题，无则填'无'"
+      truncation_rule: "超过 500 字符时截断，优先保留角色/任务/质量指标三个字段"
+
+    proactive_summarization:
+      description: "主会话在调度超过 3 个 Worker 后主动摘要前序角色产出"
+      trigger: "第 4 个 dispatch 前"
+      format: "各自 500 字摘要"
+      p0_rule: "P0 问题完整保留，不得省略"
+      after_dispatch: "每次 dispatch 结束后只保留摘要和文件引用，不保留 Agent 完整对话、工具调用详情和中间调试过程"
+
+# =============================================================================
+# 9. AI 行为围栏
+# =============================================================================
+
+fence:
+  principles:
+    - id: think_first
+      rules:
+        - "declare assumptions explicitly; ask PM when uncertain"
+        - "list all options when ambiguous; do NOT silently choose"
+        - "propose simpler alternatives when found"
+        - "stop and point out confusion when requirements unclear"
+      applicable_roles: [architect, developer, tester, reviewer]
+      violation: main_session_intercept_return_to_question
+
+    - id: simplicity_first
+      rules:
+        - "do NOT implement unrequested features"
+        - "do NOT create abstractions for single-use code"
+        - "do NOT add unrequested flexibility or configurability"
+        - "do NOT write error handling for impossible scenarios"
+        - "rewrite if 200 lines but 50 suffice"
+      applicable_roles: [architect, developer]
+      self_check: "would a senior engineer say 'overly complex'?"
+
+    - id: precise_changes
+      rules:
+        - "do NOT improve adjacent code, comments, or formatting"
+        - "do NOT refactor what isn't broken"
+        - "match existing code style even if different preference"
+        - "report unused code to main_session, do NOT delete"
+        - "delete orphaned imports/variables/functions caused by own changes"
+        - "do NOT delete pre-existing dead code unless explicitly asked"
+      applicable_roles: [developer]
+      validation: "every changed line traceable to user's explicit request"
+
+    - id: goal_driven
+      rules:
+        - "transform task into verifiable goals"
+        - "declare plan for multi-step tasks with verification per step"
+        - "pursue strong success criteria (independently verifiable) over weak ones"
+      applicable_roles: [developer, tester]
+
+  execution_rules:
+    executor: "main_session injects in dispatch prompt; reviewer checks in code review; main_session checks pre-commit"
+    table:
+      - rule: "no assuming requirement details"
+        check_timing: pre_implementation
+        handler: main_session_intercept
+        violation_level: null
+      - rule: "no adding unrequested features"
+        check_timing: code_review
+        handler: reviewer_mark_p0
+        violation_level: P0
+      - rule: "no creating branches without valid name + PM approval"
+        check_timing: pre_tool_use
+        handler: git_guard_deny
+        violation_level: null
+      - rule: "no refactoring unrelated code"
+        check_timing: per_change
+        handler: reviewer_mark_p1
+        violation_level: P1
+        note: "if also added unrequested features, upgrade to P0"
+      - rule: "must define verification criteria"
+        check_timing: task_start
+        handler: main_session_reject
+        violation_level: null
+      - rule: "changes must be traceable to requirements"
+        check_timing: pre_commit
+        handler: main_session_reject
+        violation_level: null
+      - rule: "no introducing security issues"
+        check_timing: code_review
+        handler: reviewer_mark_p0
+        violation_level: P0
+        rework_route: [architect, developer]
+
+  main_session_self_check:
+    - power: "aggregate weighted scores"
+      requirement: "show each role's raw score, weight, calculation; never show only final score"
+    - power: "adjudicate debate"
+      requirement: "cite specific argument numbers (e.g. Defender #2), judge each for validity"
+    - power: "skip role dispatch"
+      requirement: "record skip reason in task notes"
+    - power: "score consistency check"
+      requirement: "analyze and record divergence when role score diff > 20; do NOT average without analysis"
+
+# =============================================================================
+# 10. 上下文模式（Context Mode）
+# =============================================================================
+
+context_mode:
+  description: "rd-auto dispatch sub-agent 时根据意图自动选择上下文模式以优化 token 消耗"
+  modes:
+    - id: minimal
+      token_budget: "~100-200"
+      applicable_scenarios: [探索, 调查, 定位]
+      includes: [problem_statement, file_scope, investigation_hints]
+    - id: read_only
+      token_budget: "~4500"
+      applicable_scenarios: [评审, 审核, 检查]
+      includes: [acceptance_criteria, git_diff_stat, spec_docs_decisions, agent_history_last, harness_rules]
+    - id: full
+      token_budget: "~5000"
+      applicable_scenarios: [实现, 开发, 修复]
+      includes: [all_6_context_sources]
+      default: true
+  auto_inference: "主会话根据 PM 输入语义推断 context_mode，无需手动指定"
+  auto_upgrade:
+    trigger: "sub-agent returns NEEDS_CONTEXT"
+    sequence: [minimal, read_only, full]
+    max_upgrades: 2
+    after_max: escalate_to_pm
+  backward_compatibility: "未指定 context_mode 时默认 full，旧流程不受影响"
+
+# =============================================================================
+# 11. 本地自动调度引擎（Local Orchestrator）
+# =============================================================================
+
+local_orchestrator:
+  enabled: true
+  state_dir: ".harness/tasks"
+  state_file: "pipeline-state.json"
+
+  # Pipeline 阶段 → AI 角色 + rd skill 映射
+  phase_skill_map:
+    intake:
+      role: architect
+      rd_skill: null
+    explore:
+      role: architect
+      rd_skill: "/rd:explore"
+    propose:
+      role: architect
+      rd_skill: "/rd:propose"
+    design-review:
+      role: developer
+      rd_skill: null
+    implement:
+      role: developer
+      rd_skill: "/rd:apply"
+    test:
+      role: tester
+      rd_skill: null
+    code-review:
+      role: reviewer
+      rd_skill: null
+    debate:
+      role: debate
+      rd_skill: null
+    doc-sync:
+      role: reviewer
+      rd_skill: null
+    archive:
+      role: architect
+      rd_skill: "/rd:archive"
+    merge-prep:
+      role: developer
+      rd_skill: null
+    # Quick dispatch phases (flow_type: quick)
+    dispatch:
+      role: null
+      rd_skill: null
+    verify:
+      role: null
+      rd_skill: null
+    complete:
+      role: null
+      rd_skill: null
+
+  # 自动化阶段配置（不 dispatch sub-agent，由 orchestrator run-automated 命令直接执行）
+  automated_phases:
+    intake:  { executor: run-automated, sub_agent_allowed: false }
+
+  # Fanout 并行派发（team mode）
+  fanout:
+    description: "implement 阶段将 tasks.md 中的工作项拆分为并行 agent，各自在独立 worktree 中执行"
+    trigger:
+      mode: team
+      phase: implement
+      source: "tasks.md 中 ## / ### 标题解析为 work_items"
+    recommend_mode:
+      description: "基于 intent 自动推荐 legacy 或 team 模式"
+      rules:
+        - condition: "flow_type in [hotfix, quick, config-change, docs]"
+          action: force_legacy
+          label: "blocklist: 简单流程不适用 fanout"
+        - condition: "complexity_score >= 70 or affected_files >= 5 or modules >= 3"
+          action: recommend_team
+          label: "满足任一条件即可，OR 逻辑"
+        - condition: "all dimensions below threshold"
+          action: recommend_legacy
+          label: "默认单 agent 串行"
+    constraints:
+      max_concurrent: 2
+      isolation: worktree
+      circuit_breaker: "单 work_item blocked 3 次 → escalate_to_pm"
+      artifact_integration: "全部 done 后 integrateWorktreeArtifacts 收集至主仓库（last-writer-wins）"
+    when_not_to_use:
+      - "work items 之间有强依赖（fix A 才能测 B）"
+      - "所有 work items 操作同一文件（即使 worktree 隔离，合并时冲突率高）"
+      - "work items < 2（串行更高效）"
+      - "需要理解完整系统状态才能推进（如跨模块一致性校验）"
+
+  # Config-change 流程（配置/CI/依赖等小变更，4 阶段，无 explore/propose/test）
+  config_change_transitions:
+    - from: pending
+      to: intake
+    - from: intake
+      exit: DONE
+      to: implement
+    - from: implement
+      exit: DONE
+      to: code-review
+    - from: code-review
+      exit: DONE
+      score_range: [90, 100]
+      p0_count: 0
+      to: archive
+    - from: code-review
+      exit: DONE
+      score_range: [80, 90]
+      p1_count: "<=2"
+      to: archive
+    - from: code-review
+      exit: DONE
+      score_range: [75, 80]
+      to: debate
+    - from: code-review
+      exit: DONE
+      score_range: [0, 75]
+      to: rework
+    - from: archive
+      exit: DONE
+      to: complete
+      auto_complete: true
+
+  # 阶段推进表（test-only 流程，Issue !283）
+  # 链与 state-store getPipelinePhases('test-only') 严格一致：
+  #   [intake, implement, code-review, archive]。
+  # 修复前 test-only 无独立表，advance 落到 development 默认链
+  # （intake→explore），explore 不在 pipeline map → mark-dispatch 死路。
+  # 结构对齐 config_change_transitions。
+  test_only_transitions:
+    - from: pending
+      to: intake
+    - from: intake
+      exit: DONE
+      to: implement
+    - from: implement
+      exit: DONE
+      to: code-review
+    - from: code-review
+      exit: DONE
+      score_range: [90, 100]
+      p0_count: 0
+      to: archive
+    - from: code-review
+      exit: DONE
+      score_range: [80, 90]
+      p1_count: "<=2"
+      to: archive
+    - from: code-review
+      exit: DONE
+      score_range: [75, 80]
+      to: debate
+    - from: code-review
+      exit: DONE
+      score_range: [0, 75]
+      to: rework
+    - from: archive
+      exit: DONE
+      to: complete
+      auto_complete: true
+
+  # 阶段推进表（development 流程）
+  transitions:
+    - from: pending
+      to: intake
+
+    - from: intake
+      exit: DONE
+      to: explore
+
+    - from: explore
+      exit: DONE
+      to: propose
+
+    - from: propose
+      exit: DONE
+      to: design-review
+
+    - from: design-review
+      exit: DONE
+      to: implement
+
+    - from: implement
+      exit: DONE
+      to: test
+
+    - from: test
+      exit: DONE
+      to: code-review
+
+    - from: code-review
+      exit: DONE
+      score_range: [90, 100]
+      p0_count: 0
+      to: archive
+
+    - from: code-review
+      exit: DONE
+      score_range: [80, 90]
+      p1_count: "<=2"
+      to: archive
+
+    - from: code-review
+      exit: DONE
+      score_range: [75, 80]
+      to: debate
+
+    - from: code-review
+      exit: DONE
+      score_range: [0, 75]
+      to: rework
+
+    - from: debate
+      exit: DONE
+      score_range: [80, 100]
+      to: archive
+
+    - from: debate
+      exit: DONE
+      score_range: [75, 80]
+      to: archive
+
+    - from: debate
+      exit: DONE
+      score_range: [0, 75]
+      to: rework
+
+    - from: archive
+      exit: DONE
+      to: complete
+      auto_complete: true
+
+  # Hotfix 简化流程
+  hotfix_transitions:
+    - from: pending
+      to: implement
+    - from: implement
+      exit: DONE
+      to: code-review
+    - from: code-review
+      exit: DONE
+      score_range: [70, 100]
+      to: archive
+    - from: archive
+      exit: DONE
+      to: complete
+      auto_complete: true
+
+  # Docs 流程（纯文档/ADR/设计文档，不涉及代码）
+  docs_transitions:
+    - from: pending
+      to: intake
+    - from: intake
+      exit: DONE
+      to: explore
+    - from: explore
+      exit: DONE
+      to: propose
+    - from: propose
+      exit: DONE
+      to: code-review
+    - from: code-review
+      exit: DONE
+      score_range: [90, 100]
+      p0_count: 0
+      to: archive
+    - from: code-review
+      exit: DONE
+      score_range: [80, 90]
+      p1_count: "<=2"
+      to: archive
+    - from: code-review
+      exit: DONE
+      score_range: [75, 80]
+      to: debate
+    - from: code-review
+      exit: DONE
+      score_range: [0, 75]
+      to: rework
+    - from: debate
+      exit: DONE
+      score_range: [80, 100]
+      to: archive
+    - from: debate
+      exit: DONE
+      score_range: [75, 80]
+      to: archive
+    - from: debate
+      exit: DONE
+      score_range: [0, 75]
+      to: rework
+    - from: archive
+      exit: DONE
+      to: complete
+      auto_complete: true
+
+  # Quick dispatch 流程（意图快捷调度，4 阶段）
+  quick_transitions:
+    - from: pending
+      to: intake
+    - from: intake
+      exit: DONE
+      to: dispatch
+    - from: dispatch
+      exit: DONE
+      to: verify
+    - from: dispatch
+      exit: BLOCKED
+      to: dispatch
+    - from: verify
+      exit: DONE
+      to: complete
+    - from: verify
+      exit: DONE_WITH_CONCERNS
+      to: complete
+
+# =============================================================================
+# 12. 意图分类映射（Intent Classification）
+# =============================================================================
+
+intent_classification:
+  # intent_category → target_role 路由表
+  # intent_category 选择 AI 角色（who），task_type 选择 pipeline 形状（how）
+  # 两者独立维度，可组合
+  category_role_map:
+    - intent_category: bug_fix
+      target_role: Developer
+      condition: always
+    - intent_category: explore_design
+      target_role: Architect
+      condition: always
+    - intent_category: code_review
+      target_role: Reviewer
+      condition: always
+    - intent_category: testing
+      target_role: Tester
+      condition: always
+    - intent_category: complex_feature
+      target_role: full pipeline
+      condition: always
+    - intent_category: quick_change
+      target_role: Developer
+      condition: affected_files >= 3
+    - intent_category: quick_change
+      target_role: main_session_self
+      condition: affected_files <= 2
+
+  # 置信度分级路由阈值
+  confidence_thresholds:
+    HIGH: 0.85    # >= 0.85: auto-dispatch without PM confirmation
+    MEDIUM: 0.70  # 0.70-0.85: ask PM for confirmation
+    LOW: 0.70     # < 0.70: main session handles directly (self_handle)
+
+  # Flow Type 自动路由（P1-2 — 简单意图默认走 quick flow）
+  flow_type_routing:
+    - intent_category: bug_fix
+      flow_type: quick
+      condition: "affected_files <= 3 and confidence >= 0.85"
+    - intent_category: quick_change
+      flow_type: quick
+      condition: "affected_files <= 2"
+    - intent_category: code_review
+      flow_type: quick
+      condition: always
+    - intent_category: testing
+      flow_type: quick
+      condition: always
+    - intent_category: complex_feature
+      flow_type: development
+      condition: always
+    - intent_category: explore_design
+      flow_type: development
+      condition: always
+
+  # 复杂度阈值（动态路由决策）
+  complexity_thresholds:
+    quick_dispatch: 40        # 复杂度 < 40: 适合 quick dispatch
+    upgrade_to_full: 65       # 复杂度 >= 65: 升级为 full pipeline
+    ask_pm: 52                 # 40-52: 需要 PM 确认是否 dispatch
+  # 复杂度评估权重
+  complexity_weights:
+    file_count: 30             # 文件数量权重（每文件 10 分，上限 30）
+    module_impact: 20          # 模块影响范围权重（每模块 7 分，上限 20）
+    code_complexity: 35        # 代码复杂度权重（基于行数、圈复杂度）
+    historical_success: 15     # 历史成功率权重（0-100 映射到 0-15）
+  # 代码复杂度分析阈值
+  complexity_analysis:
+    lines_per_point: 12         # 多少行对应 1 分（200 行 / 17 ≈ 12）
+    complexity_per_point: 1.7   # 多少复杂度对应 1 分（30 / 18 ≈ 1.7）
+    control_flow_weight: 2     # 控制流语句每个权重
+    function_weight: 3         # 函数定义每个权重
+    indent_weight: 0.5         # 缩进深度权重
+
+  # Follow-up 建议表（dispatch 完成后建议的后续意图）
+  follow_up_suggestions:
+    bug_fix: [code_review, testing]
+    explore_design: [complex_feature, quick_change]
+    code_review: [bug_fix, quick_change]
+    testing: [code_review]
+    quick_change: [code_review, testing]
+
+# =============================================================================
+# 12bis. Dispatch 超时配置（CodexBackend.execFileSync timeout）
+# =============================================================================
+#
+# 按 phase 配置的 dispatch 超时阈值（毫秒或人类可读 "10m" / "30m"）。
+# CodexBackend.dispatchSubAgent(options.phase) 在 execFileSync 时查表。
+# 优先级：options.timeoutMs（显式覆盖，测试用） > overrides[phase] > default
+#
+# 解析规则（parseHumanDuration）：
+#   - "10m" → 600000（10 分钟）
+#   - "1h"  → 3600000（1 小时）
+#   - "30s" → 30000
+#   - "600" → 600（裸数字按毫秒）
+#
+# 用途：避免 codex exec 同步阻塞无限期挂住主会话；不同 phase 任务量不同，
+#       implement 30min / explore 15min / code-review 10min。
+dispatch:
+  timeout:
+    default: 10m
+    overrides:
+      explore: 15m
+      propose: 15m
+      implement: 30m
+      code-review: 10m
+      design-review: 15m
+      test: 10m
+      debate: 10m
+      archive: 10m
+
+# =============================================================================
+# 13. 状态共享（Shared State）
+# =============================================================================
+
+shared_state:
+  description: "跨角色的结构化状态共享，避免通过 dispatch prompt 传递大量上下文"
+  storage: ".harness/shared-state/<change-name>/"
+  files:
+    - file: concerns.json
+      writer: reviewer
+      readers: [advance, developer_rework]
+      purpose: "P0/P1 问题列表，code-review 阶段自动统计 P0 veto"
+      schema:
+        p0:
+          type: array
+          description: "阻断级问题，任一 open → veto"
+          item_fields: [id, title, severity, status, file, line, raised_by, created_at]
+        p1:
+          type: array
+          description: "非阻断问题，≤2 可条件通过"
+          item_fields: [id, title, severity, status, file, line, raised_by, created_at]
+      schema_note: "canonical format is grouped {p0:[],p1:[]}. advance() reads via countOpenP0FromConcerns which also tolerates legacy flat {concerns:[{severity,status}]} for backward compat. status=resolved items are excluded from the open-P0 count that drives routing."
+      status_values: [open, resolved, dismissed]
+      veto_rule: "open p0 count > 0 → advance() code-review 阶段自动 veto，无需调用方传 --p0-count"
+      routing_rule: "advance() routes DONE_WITH_CONCERNS by open-P0 count: 0 → auto-promote (DONE); >0 → evaluate_concerns (needs_pm). P1/P2 never block advance (handled by scoring)."
+  orchestrator_commands:
+    - command: read-shared-state
+      description: "读取 shared-state 目录下的指定文件"
+    - command: write-shared-state
+      description: "写入 shared-state 目录下的指定文件"
+    - command: resolve-concern
+      description: "将指定 concern 标记为 resolved"
+  lifecycle: "change complete 时自动清理 shared-state 目录"
+
+# knowledge_rules（项目自生长 AI 行为规则）
+# 定义在 CLAUDE.md §11，无机器执行面，不需要 YAML 枚举。

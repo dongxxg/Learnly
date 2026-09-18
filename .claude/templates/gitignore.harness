@@ -45,12 +45,17 @@ outputs/
 /.project
 /.pydevproject
 
+
+# 框架目录（setup-harness.sh 安装产物；忽略所有常见 AI agent 框架目录）
+.claude/
 .codex/
 .codex-plugin/
 .codebuddy/
 .codebuddy-plugin/
 .qoder/
 .qoder-plugin/
+.zcode/
+.zcode-plugin/
 .trae/
 .cursor/
 .windsurf/
@@ -67,37 +72,8 @@ outputs/
 # MCP 本地配置（含访问 token，禁止提交）
 .mcp.json
 
-.codegraph
-
-# ===== 业务构建产物 =====
-# Go
-*.exe
-*.exe~
-backend/server
-backend/cmd/server/server
-*.test
-# Python venv / 打包
-.venv/
-venv/
-env/
-*.egg-info/
-*.whl
-# 前端构建输出
-dist/
-build/
-.vite/
-.tmp/
-
-.zcode/
-.zcode-plugin/
-# ===== 框架 vendored 模式：框架文件入库，仅忽略凭证/依赖/临时态 =====
-.claude/skills/daily-report/scripts/node_modules/
-.claude/settings.local.json
-.harness/.push-challenge
-.harness/.push-approved
-.harness/.framework-edit
-.harness/.pending-upgrade-msg
+# setup 诊断日志（含 npm 错误等运行时信息）
 .harness/.setup-*.log
 .harness/.worktrees/
+# daily-report 多仓库采集配置（collect-all.js 生成，含本机绝对路径，机器本地）
 .harness-projects
-.framework-manifest.vendored.bak

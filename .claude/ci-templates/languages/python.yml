@@ -1,0 +1,10 @@
+# Uni-AURI CI Template — Python 语言默认变量
+# 用法：include 此文件设置 Python 项目的 BUILD_IMAGE/CHECK_CMD/TEST_CMD/COVERAGE_CMD
+# 注意：TEST_CMD 通过 tee 保存 pytest 输出（含 --cov 的 TOTAL 行）到 pytest-cov.log；
+#       COVERAGE_CMD 是纯解析命令（基于 pytest-cov.log），不会重跑测试。
+
+variables:
+  BUILD_IMAGE: "hub.unitechs.com/public/gitlab/gitlab-runner-all-in-one:20250509"
+  CHECK_CMD: "ruff check . && mypy ."
+  TEST_CMD: "pytest --cov=. --cov-report=term-missing 2>&1 | tee pytest-cov.log; exit ${PIPESTATUS[0]}"
+  COVERAGE_CMD: "grep '^TOTAL' pytest-cov.log | awk '{print $NF}' | tr -d '%'"

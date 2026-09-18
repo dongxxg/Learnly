@@ -1,0 +1,18 @@
+# registry.yaml — 已验证本体注册表（ontology-ask 唯一可用范围）
+# 准入标准见 .harness/knowledge/ontology-ask-skill-design.md §5.4.1：
+#   draft:false ｜ validate 0 错误 ｜ domain-query 抽测真实数据 ｜ 推荐 L2 chat 回归 ｜ evidence 四要素
+# stale 规则：API 实时 version ≠ 登记 version → STALE 拦截；本体删除 → state: retired
+ontologies:
+  - file: network-resource-ops.yml          # API 列表的 file 字段（schema 端点真实键，注册表主键）
+    situation: network-resource-ops          # 即 domain-query 的 ontologyId（实测二者同名）
+    domain: 资源管理
+    version: "2.0.0"                         # 登记时已验证版本（2026-09-09 实测环境当前服务 2.0.0；
+                                             # v2.1.0 曾发布后环境回退，待重新发布并重新验证后升登记）
+    state: active                            # active | retired
+    keywords: [设备, 端口, 端口IP, 电路, 端口组, 资源目录, 节点, 网络, 厂家, 型号]
+    verified_at: "2026-09-04"                # 必须带引号：裸日期会被 YAML 解析为 date 对象，无法 JSON 序列化
+    verified_by: liubo
+    evidence:
+      validate: "沙箱 validate 0 错误（ontology-sandbox-network-resource-ops-20260903141544）"
+      domain_query: "4 组抽测全部真实数据（searchDevices/getDeviceDetail/getDevicePorts/listPortIps）"
+      chat_l2: "会话 f7e3bdc3f477 L2 回归 4 问全过（节点/管理域、EAV、设备电路、端口组）"

@@ -1,0 +1,69 @@
+# Uni-AURI CI Template — check-build.yml
+# 包含：check（静态检查）、test（单元测试 + 覆盖率门禁）
+# 命令通过变量注入：CHECK_CMD / TEST_CMD / COVERAGE_CMD
+# test 和 coverage 合并为单 job：TEST_CMD 产出测试结果+覆盖率数据，COVERAGE_CMD 纯解析（不重跑）
+
+# ── S2: 静态检查（CHECK_CMD 留空则跳过） ────────────────────
+check:
+  stage: check
+  image: $BUILD_IMAGE
+  variables:
+    GIT_STRATEGY: fetch
+  script:
+    - |
+      if [ -z "${CHECK_CMD}" ]; then
+        echo "[check] CHECK_CMD is empty, skipping"
+        exit 0
+      fi
+    - ${CHECK_CMD}
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "api"
+      when: never
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH
+  allow_failure: false
+
+# ── S3: 单元测试 + 覆盖率门禁（TEST_CMD 必填，COVERAGE_CMD 留空则跳过门禁） ────
+test:
+  stage: test
+  image: $BUILD_IMAGE
+  variables:
+    GIT_STRATEGY: fetch
+  script:
+    - |
+      if [ -z "${TEST_CMD}" ]; then
+        echo "[test] ERROR: TEST_CMD is required. Include a language template or set TEST_CMD in project variables."
+        exit 1
+      fi
+    - 'echo "[test] Running: ${TEST_CMD}"'
+    - ${TEST_CMD}
+    - |
+      if [ -z "${COVERAGE_CMD}" ]; then
+        echo "[test] COVERAGE_CMD is empty, skipping coverage gate"
+        exit 0
+      fi
+    - 'echo "[test] Running coverage: ${COVERAGE_CMD}"'
+    - COVERAGE_OUTPUT=$(${COVERAGE_CMD})
+    - echo "${COVERAGE_OUTPUT}"
+    - COVERAGE_VALUE=$(echo "${COVERAGE_OUTPUT}" | tail -1 | tr -d '[:space:]')
+    - |
+      if ! echo "${COVERAGE_VALUE}" | grep -qE '^[0-9]+(\.[0-9]+)?$'; then
+        echo "[test] ERROR: last line of COVERAGE_CMD output is not a valid number: '${COVERAGE_VALUE}'"
+        echo "[test] Expected a plain numeric percentage (e.g., 80.5 or 75) on the last stdout line."
+        exit 1
+      fi
+    - 'echo "[test] Coverage value: ${COVERAGE_VALUE}%"'
+    - |
+      if python3 -c "exit(0 if float('${COVERAGE_VALUE}') >= float('${COVERAGE_THRESHOLD}') else 1)"; then
+        echo "[test] Coverage PASS: ${COVERAGE_VALUE}% >= ${COVERAGE_THRESHOLD}% threshold"
+        exit 0
+      else
+        echo "[test] Coverage FAIL: ${COVERAGE_VALUE}% < ${COVERAGE_THRESHOLD}% threshold"
+        exit 1
+      fi
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "api"
+      when: never
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH
+  allow_failure: false

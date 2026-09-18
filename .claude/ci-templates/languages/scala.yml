@@ -1,0 +1,11 @@
+# Uni-AURI CI Template — Scala 语言默认变量
+# 用法：include 此文件设置 Scala 项目的 BUILD_IMAGE/CHECK_CMD/TEST_CMD/COVERAGE_CMD
+# 注意：COVERAGE_CMD 依赖 sbt-scoverage 插件，项目需在 plugins.sbt 中添加该插件
+# 注意：TEST_CMD 已含 coverage test coverageReport，跑测试时同时生成 scoverage.xml；
+#       COVERAGE_CMD 是纯解析命令（基于 scoverage.xml），不会重跑测试。
+
+variables:
+  BUILD_IMAGE: "hub.unitechs.com/public/gitlab/gitlab-runner-all-in-one:20250509"
+  CHECK_CMD: "sbt scalafmtCheck"
+  TEST_CMD: "sbt coverage test coverageReport"
+  COVERAGE_CMD: "grep 'statement-rate' target/scala-*/scoverage-report/scoverage.xml 2>/dev/null | head -1 | sed 's/.*statement-rate=\"\\([0-9.]*\\)\".*/\\1/' | awk '{printf \"%.0f\", $1}'"

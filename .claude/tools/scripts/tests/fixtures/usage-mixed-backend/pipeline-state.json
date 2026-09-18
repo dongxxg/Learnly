@@ -1,0 +1,48 @@
+{
+  "change_name": "usage-mixed-backend-fixture",
+  "current_phase": "implement",
+  "pipeline": {
+    "implement": {
+      "status": "done",
+      "started_at": "2026-07-07T10:00:00Z",
+      "completed_at": "2026-07-07T10:30:00Z",
+      "dispatch_history": [
+        {
+          "started_at": "2026-07-07T10:00:00Z",
+          "completed_at": "2026-07-07T10:10:00Z",
+          "token_usage": {
+            "input_tokens": 1000,
+            "output_tokens": 100,
+            "cache_read_input_tokens": 500,
+            "cache_creation_input_tokens": 200,
+            "model": "claude-sonnet-4-6",
+            "backend": "claude"
+          },
+          "exit_status": "DONE"
+        },
+        {
+          "started_at": "2026-07-07T10:10:00Z",
+          "completed_at": "2026-07-07T10:20:00Z",
+          "token_usage": {
+            "total": 30000,
+            "backend": "codex"
+          },
+          "exit_status": "DONE"
+        },
+        {
+          "started_at": "2026-07-07T10:20:00Z",
+          "completed_at": "2026-07-07T10:25:00Z",
+          "token_usage": {
+            "input_tokens": 500,
+            "output_tokens": 50,
+            "cache_read_input_tokens": 200,
+            "cache_creation_input_tokens": 100,
+            "model": "claude-sonnet-4-6"
+          },
+          "exit_status": "DONE"
+        }
+      ]
+    }
+  },
+  "token_summary": null
+}

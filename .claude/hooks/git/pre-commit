@@ -1,0 +1,196 @@
+#!/usr/bin/env bash
+# pre-commit hook: 框架文件保护 + concerns P0/P1 门禁 + TDD Iron Law 检查
+set -euo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+
+# 框架目录定位：优先读 git config harness.backend-dir（安装环境由 setup-harness.sh 写入），
+# 缺省回退 .claude。不运行时探测目录，避免多目录共存时误命中 generator 副本。
+# --get 多值时个别 git 版本返回多行且 exit 非零，head -1 + || true 兜底。
+_HARNESS_DIR="$(git -C "$REPO_ROOT" config --get harness.backend-dir 2>/dev/null | head -1 || true)"
+_HARNESS_DIR="${_HARNESS_DIR:-.claude}"
+# 转义点号供正则使用（.claude → \.claude），防 . 元字符过宽匹配
+_HARNESS_DIR_ESC="${_HARNESS_DIR//./\\.}"
+
+# ============================================================
+# framework-edit bypass 标记维护
+# ============================================================
+# bypass 撤销时清理"已提示"标记，使下次激活重新提示（配合下方提示去重）。
+_FRAMEWORK_EDIT_BYPASS="$REPO_ROOT/.harness/.framework-edit"
+_FRAMEWORK_EDIT_SHOWN="$REPO_ROOT/.git/.framework-edit-shown"
+if [ ! -f "$_FRAMEWORK_EDIT_BYPASS" ] && [ -f "$_FRAMEWORK_EDIT_SHOWN" ]; then
+    rm -f "$_FRAMEWORK_EDIT_SHOWN" 2>/dev/null || true
+fi
+
+# ============================================================
+# 跨平台执行权限修正：Windows 无权限位，新建脚本被存为 644
+# ============================================================
+# 仅对被 git 直接 exec 的脚本（.sh / .py）修执行权限；node 调用的 .mjs/.cjs/.js 不需 x。
+_FIXED=0
+_SCRIPT_RE='\.(sh|py)$'
+
+while IFS= read -r f; do
+    [[ "$f" =~ $_SCRIPT_RE ]] || continue
+    MODE=$(git ls-files -s -- "$f" 2>/dev/null | cut -d' ' -f1)
+    if [ "$MODE" = "100644" ]; then
+        git update-index --chmod=+x -- "$f"
+        _FIXED=$((_FIXED + 1))
+    fi
+done < <(git diff --cached --name-only --diff-filter=AM 2>/dev/null)
+[ "$_FIXED" -gt 0 ] && echo "执行权限已自动修正: ${_FIXED} 个脚本文件 (644 → 755)"
+# 注：CRLF→LF 由仓库根 .gitattributes（text eol=lf）统一处理，hook 不做二次清洗。
+
+# ============================================================
+# 框架文件保护
+# ============================================================
+MANIFEST="$REPO_ROOT/.framework-manifest"
+if [ -f "$MANIFEST" ]; then
+    framework_changes=()
+    while IFS= read -r staged; do
+        [ -z "$staged" ] && continue
+        # Check manifest directories
+        while IFS= read -r dir; do
+            [ -z "$dir" ] && continue
+            if [[ "$staged" == "$dir" || "$staged" == "$dir"/* ]]; then
+                framework_changes+=("$staged")
+                break
+            fi
+        done < <(grep '^d ' "$MANIFEST" | sed 's/^d //')
+        # Check manifest files (if not already matched by directory)
+        if [ ${#framework_changes[@]} -eq 0 ] || [[ " ${framework_changes[*]} " != *" $staged "* ]]; then
+            if grep -q "^f ${staged}$" "$MANIFEST" 2>/dev/null; then
+                framework_changes+=("$staged")
+            fi
+        fi
+    done < <(git diff --cached --name-only)
+
+    if [ ${#framework_changes[@]} -gt 0 ]; then
+        # bypass 仅在框架源仓生效（有 excluded git hooks 为源仓特征）
+        BYPASS_FILE="$REPO_ROOT/.harness/.framework-edit"
+        if [ -f "$BYPASS_FILE" ] && [ -f "$REPO_ROOT/$_HARNESS_DIR/hooks/git/pre-receive" ]; then
+            # bypass 提示去重：首次激活提示一次，后续 commit 静默，bypass 撤销后重新提示
+            SHOWN_MARKER="$REPO_ROOT/.git/.framework-edit-shown"
+            if [ ! -f "$SHOWN_MARKER" ]; then
+                echo "[pre-commit] framework-edit bypass active"
+                touch "$SHOWN_MARKER" 2>/dev/null || true
+            fi
+        else
+            echo "检测到框架文件变更，提交被阻止。"
+            echo "变更文件:"
+            for f in "${framework_changes[@]}"; do
+                echo "     - $f"
+            done
+            echo ""
+            echo "   恢复方案（二选一）："
+            echo "     1) 还原变更: git checkout -- ${framework_changes[*]}"
+            echo "     2) 重新安装: bash $_HARNESS_DIR/tools/scripts/setup/setup-harness.sh"
+            exit 1
+        fi
+    fi
+fi
+
+# ============================================================
+# GATE_BYPASS 审批态直校（concerns-commit-gate D5）
+# ============================================================
+# 不读 .git/COMMIT_EDITMSG——pre-commit 阶段它是上一次提交的陈旧消息（首次提交
+# 时不存在），曾导致上一次的 GATE_BYPASS token 静默跳过下一次的 TDD 检查。
+# 现直校 challenge/approval 双文件 + nonce 一致 + TTL（复刻 commit-msg 判定，
+# 不消费 token——单次消费仍归 commit-msg）。路径硬编码 .claude（与 commit-msg 一致）。
+_BYPASS_ACTIVE=0
+if [ -f "$REPO_ROOT/.harness/.bypass-challenge" ] && [ -f "$REPO_ROOT/.claude/.bypass-approved" ]; then
+    _BP_NONCE="$(cut -d'|' -f1 "$REPO_ROOT/.harness/.bypass-challenge" 2>/dev/null)"
+    _BP_APPROVED="$(head -1 "$REPO_ROOT/.claude/.bypass-approved" 2>/dev/null)"
+    _BP_TS="$(cut -d'|' -f6 "$REPO_ROOT/.harness/.bypass-challenge" 2>/dev/null)"
+    if [ -n "$_BP_NONCE" ] && [ "$_BP_NONCE" = "$_BP_APPROVED" ] \
+        && [[ "$_BP_TS" =~ ^[0-9]+$ ]] \
+        && [ $(( $(date +%s) - 10#$_BP_TS )) -le 300 ]; then
+        _BYPASS_ACTIVE=1
+    fi
+fi
+
+# ============================================================
+# concerns 门禁：活跃 change P0/P1 清零检查（concerns-commit-gate）
+# ============================================================
+# 分级判定在 concerns-gate.mjs（P0 须 resolved；P1 非 open 即放行）。本块零成本
+# 预检：无 spec 数据的业务仓不 spawn node。检查器不可用（rc=2）fail-open 放行，
+# 拦截（rc=1）透传。位置在 TDD 块之前——TDD 块的多处 early exit 0 不得吞掉本门禁。
+if [ "$_BYPASS_ACTIVE" -ne 1 ]; then
+    _GATE_CHANGES="$REPO_ROOT/.harness/spec/changes"
+    _GATE_SHARED="$REPO_ROOT/.harness/shared-state"
+    if [ -d "$_GATE_CHANGES" ] && [ -d "$_GATE_SHARED" ] && [ -n "$(ls -A "$_GATE_CHANGES" 2>/dev/null)" ]; then
+        _GATE_SCRIPT="$REPO_ROOT/$_HARNESS_DIR/skills/rd-auto/scripts/concerns-gate.mjs"
+        if [ -f "$_GATE_SCRIPT" ] && command -v node >/dev/null 2>&1; then
+            _GATE_RC=0
+            # --user/--email: author 过滤，只拦截本人任务的 open P0/P1（非本人不拦截）
+            node "$_GATE_SCRIPT" --project-root "$REPO_ROOT" \
+                --user "$(git -C "$REPO_ROOT" config user.name 2>/dev/null || true)" \
+                --email "$(git -C "$REPO_ROOT" config user.email 2>/dev/null || true)" \
+                || _GATE_RC=$?
+            if [ "$_GATE_RC" -eq 1 ]; then
+                exit 1
+            fi
+            # rc 0 静默放行；rc 2 检查器/数据故障已自带警告，fail-open 继续
+            if [ "$_GATE_RC" -ne 0 ] && [ "$_GATE_RC" -ne 2 ]; then
+                echo "[concerns-gate] 检查器异常退出（rc=$_GATE_RC），fail-open 放行"
+            fi
+        else
+            echo "[concerns-gate] 检查器不可用（$_HARNESS_DIR/skills/rd-auto/scripts/concerns-gate.mjs 缺失或 node 不可用），fail-open 放行"
+        fi
+    fi
+fi
+
+# ============================================================
+# TDD Iron Law 增量检查
+# ============================================================
+if [ "$_BYPASS_ACTIVE" -eq 1 ]; then
+    echo "[TDD] GATE_BYPASS 绕过"
+    exit 0
+fi
+
+# 生产代码扩展名（Java/Python/Go/Node.js/Vue/Perl/C/Rust/Lua）
+_CODE_RE='\.(py|java|go|c|cpp|cc|h|hpp|ts|js|jsx|tsx|mjs|cjs|mts|cts|vue|pl|pm|rs|lua)$'
+# 测试文件模式（路径含 test/__tests__/spec/cy/t/、文件名含 _test/.test/.spec/_spec/.cy、conftest.py）
+_TEST_RE='((^|/)[Tt]est[s]?/|(^|/)__tests__/|(^|/)[Tt]est_|(^|/)spec/|_test\.|\.test\.|\.spec\.|_spec\.|\.cy\.|(^|/)t/|(^|/)conftest\.py)'
+
+# 轻量变更白名单（不触发 TDD 检查）
+#   .d.ts              — TypeScript 类型声明，无运行时逻辑
+#   .vue               — Vue SFC 本质是视图模板，与 .css/.html 同类，无前端测试框架时不应阻塞
+#   {tool}.config.{ext} — 枚举已知构建/工具配置文件
+_SKIP_TDD_RE='(\.d\.ts$|\.vue$|(^|/)(vite|webpack|jest|rollup|babel|tsconfig|eslint|prettier|tailwind|postcss|karma|cypress|playwright|nuxt|next)\.config\.[^/]+$)'
+
+# 过滤链: 代码文件 → 排除框架 → 排除测试 → 排除轻量白名单（仅剩需测试的生产代码）
+_PROD=$(git diff --cached --name-only --diff-filter=AM 2>/dev/null \
+    | grep -E "$_CODE_RE" \
+    | grep -vE "(^${_HARNESS_DIR_ESC}/|^\.harness/)" \
+    | grep -vE "$_TEST_RE" \
+    | grep -vE "$_SKIP_TDD_RE" \
+    || true)
+
+[ -z "$_PROD" ] && exit 0
+
+# 纯删除/裁剪豁免：生产代码零新增行 → 不引入新行为，存量测试仍覆盖，放行。
+# 过滤链与上方 _PROD 完全一致；numstat 首列为新增行数（二进制为 "-"，awk 数值化为 0）。
+_ADDED=$(git diff --cached --numstat --diff-filter=AM 2>/dev/null \
+    | grep -E "$_CODE_RE" \
+    | grep -vE "(^${_HARNESS_DIR_ESC}/|^\.harness/)" \
+    | grep -vE "$_TEST_RE" \
+    | grep -vE "$_SKIP_TDD_RE" \
+    | awk '{s+=$1} END{print s+0}' || true)
+[ "${_ADDED:-0}" -eq 0 ] && { echo "[TDD] 纯删除变更，存量测试仍有效"; exit 0; }
+
+# 检查 staged 中是否有测试文件
+_HAS_TEST=$(git diff --cached --name-only --diff-filter=AM 2>/dev/null \
+    | grep -E "$_TEST_RE" \
+    | grep -E "$_CODE_RE" \
+    || true)
+
+if [ -n "$_HAS_TEST" ]; then
+    echo "[TDD] 检测到测试变更"
+    exit 0
+fi
+
+_PC=$(echo "$_PROD" | wc -l | tr -d ' ')
+echo "[TDD] 检测到 ${_PC} 个生产代码变更，无对应测试"
+echo "$_PROD" | sed 's/^/  - /'
+echo "解决: 添加测试并 stage"
+exit 1
