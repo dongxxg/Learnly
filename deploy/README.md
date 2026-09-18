@@ -7,7 +7,7 @@
 ```bash
 cd deploy
 cp .env.example .env          # 至少填入 LEARNLY_AI_LLM_API_KEY、改 JWT_SECRET
-docker compose up -d --build
+docker-compose up -d --build
 ```
 
 ## 服务与端口
