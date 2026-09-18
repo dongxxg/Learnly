@@ -3,7 +3,7 @@
 # 敏感项（password/secret）留空，由环境变量注入。
 
 [server]
-port = "8080"   # 监听端口
+port = "8888"   # 监听端口
 mode = "debug"  # debug | release | test
 
 [postgres]
