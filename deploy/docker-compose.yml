@@ -23,7 +23,8 @@ services:
     container_name: learnly-redis
     command: redis-server --appendonly yes
     ports:
-      - "6379:6379"
+      # 宿主机 6379 已被 scpc-redis 占用，映射到 16379；容器内仍为 6379
+      - "16379:6379"
     volumes:
       - redisdata:/data
 
@@ -33,7 +34,8 @@ services:
     container_name: learnly-ai-service
     env_file: .env
     ports:
-      - "8000:8000"
+      # 宿主机 8000/18000 已被占用（本地服务/rinetd），映射到 28000；容器内仍为 8000
+      - "28000:8000"
     depends_on:
       - redis
 
@@ -63,7 +65,7 @@ services:
       context: ../frontend
     container_name: learnly-frontend
     ports:
-      - "80:80"
+      - "8888:80"
     depends_on:
       - backend
 
