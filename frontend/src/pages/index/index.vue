@@ -35,8 +35,6 @@ function onTap(m: LearnlyModule) {
 </script>
 
 <style scoped lang="scss">
-@use '@/uni.scss' as *;
-
 .container {
   padding: 48rpx 32rpx;
 }
