@@ -5,7 +5,7 @@ WORKDIR /app
 # go.mod 中 replace github.com/dongxxg/go-tools => ./pkg，需先拷贝 pkg 才能 download
 COPY go.mod go.sum ./
 COPY pkg ./pkg
-RUN go mod download
+# RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /out/server ./cmd/server
 
@@ -18,5 +18,7 @@ WORKDIR /app
 COPY --from=builder /out/server .
 # pkg/config 按二进制同级 conf/ 目录发现配置文件
 COPY --from=builder /app/cmd/server/conf ./conf
+# 启动时幂等加载 seed 数据，缺失会 log.Fatalf 阻塞启动
+COPY --from=builder /app/seeds ./seeds
 EXPOSE 8080
 ENTRYPOINT ["./server"]
