@@ -177,10 +177,64 @@ export function normalizeConcerns(content) {
       ...(item.created_at ? { created_at: item.created_at } : {}),
       ...(item.resolved_by ? { resolved_by: item.resolved_by } : {}),
       ...(item.resolved_at ? { resolved_at: item.resolved_at } : {}),
+      // resolution（修复说明）是 P0/P1 关闭证据的载体、dimension（评审维度）用于复盘
+      // 归因——白名单缺项曾使两字段写盘时被静默丢弃（issue !293），下游
+      // daily-report concern_stats 与评审闭环失真。仍走条件展开：缺省不产出空字段。
+      ...(item.resolution ? { resolution: item.resolution } : {}),
+      ...(item.dimension ? { dimension: item.dimension } : {}),
     };
     if (severity === "P0") p0.push(normalized);
     else if (severity === "P1") p1.push(normalized);
     else p2.push(normalized);
   }
   return { p0, p1, p2 };
+}
+
+/**
+ * Merge an incoming concerns payload into existing concerns.json content by
+ * entry id (issue !296: write-shared-state 默认整体覆盖，只重发增量会静默抹掉
+ * 历史条目). Contract:
+ *   - incoming 先过 normalizeConcerns 写入门禁（新数据必须合规，非法照样抛错）；
+ *   - existing 按 collectConcernLists 同款三结构**容错收集、不再校验**——读侧
+ *     容忍原则：AI 直改过的遗留数据（如 status:"fixed"）不得阻塞合并；
+ *   - 同 id 冲突以 incoming 为准（与 resolve-concern 的 read-modify-write 语义
+ *     一致，后写胜出），且按新条目 severity 重新归组，原桶不留残影；
+ *   - 未冲突历史条目原样保留（含非规范字段）。返回规范分组 {p0,p1,p2}。
+ */
+export function mergeConcerns(existing, incoming) {
+  const incomingNorm = normalizeConcerns(incoming); // 写入门禁只作用于新数据
+  const merged = { p0: [], p1: [], p2: [] };
+
+  // 容错收集既有条目：分组键在条目缺 severity 时补齐（同 normalizeConcerns）；
+  // 裸数组/包裹结构无键可补，severity 缺失归 p2——与读侧 countOpenP0FromConcerns
+  // 行为一致（缺 severity 一律不计 P0，归 p2 不改变门禁判定）。
+  const items = [];
+  if (Array.isArray(existing)) {
+    items.push(...existing);
+  } else if (existing && typeof existing === "object") {
+    if (Array.isArray(existing.concerns)) items.push(...existing.concerns);
+    if (Array.isArray(existing.p0)) items.push(...existing.p0.map((c) => ({ ...c, severity: c.severity || "P0" })));
+    if (Array.isArray(existing.p1)) items.push(...existing.p1.map((c) => ({ ...c, severity: c.severity || "P1" })));
+    if (Array.isArray(existing.p2)) items.push(...existing.p2.map((c) => ({ ...c, severity: c.severity || "P2" })));
+  }
+  for (const item of items) {
+    if (!item || typeof item !== "object") continue; // 垃圾条目容忍，不阻塞合并
+    const sev = String(item.severity ?? "").toUpperCase();
+    if (sev === "P0") merged.p0.push(item);
+    else if (sev === "P1") merged.p1.push(item);
+    else merged.p2.push(item);
+  }
+
+  // 同 id 既有条目先移除（任何桶），再按 incoming 的 severity 归组追加在后
+  const incomingItems = [...incomingNorm.p0, ...incomingNorm.p1, ...incomingNorm.p2];
+  const incomingIds = new Set(incomingItems.map((c) => c.id));
+  for (const bucket of [merged.p0, merged.p1, merged.p2]) {
+    for (let i = bucket.length - 1; i >= 0; i--) {
+      if (incomingIds.has(bucket[i].id)) bucket.splice(i, 1);
+    }
+  }
+  merged.p0.push(...incomingNorm.p0);
+  merged.p1.push(...incomingNorm.p1);
+  merged.p2.push(...incomingNorm.p2);
+  return merged;
 }

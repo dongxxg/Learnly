@@ -370,6 +370,13 @@ function mergeAiSections(sections, date) {
     for (const [phase, count] of Object.entries(ass.by_phase || {})) {
       mss.by_phase[phase] = (mss.by_phase[phase] || 0) + count;
     }
+    // 变更一次通过率 / 返工总次数（多源合并时与 total_changes 同步累加，保持同集合；
+    // 老日报无这三键 → || 0 / || {} 兜底）
+    mss.zero_rework_changes += ass.zero_rework_changes || 0;
+    mss.total_rework_count += ass.total_rework_count || 0;
+    for (const [role, times] of Object.entries(ass.rework_by_role || {})) {
+      mss.rework_by_role[role] = (mss.rework_by_role[role] || 0) + times;
+    }
 
     // concern_stats
     const mcs = ms.concern_stats;
@@ -449,7 +456,10 @@ function emptyAiSection(date) {
       // by_backend：按 backend 分组聚合 token（Claude/Codex 不混合求和）
       by_backend: {},
       backend_fallback_count: 0,
-      spec_stats: { total_changes: 0, closed_loop: 0, open: 0, by_phase: {} },
+      spec_stats: {
+        total_changes: 0, closed_loop: 0, open: 0, by_phase: {},
+        zero_rework_changes: 0, total_rework_count: 0, rework_by_role: {},
+      },
       concern_stats: { total: 0, p0_found: 0, p0_closed: 0, p1_found: 0, p1_closed: 0, missing_author_skipped: 0 },
       session_input_tokens: 0,
       session_output_tokens: 0,
@@ -839,11 +849,34 @@ function renderAiSection(ai, lines) {
   lines.push('### 质量指标');
   lines.push('| 指标 | 数值 |');
   lines.push('|------|------|');
-  const firstPass = sum.spec_stats && sum.spec_stats.total_changes
-    ? Math.round((sum.spec_stats.closed_loop / sum.spec_stats.total_changes) * 100) + '%'
+  // 注：原「变更闭环率」行已移除——它与下方「### SPEC 闭环统计」节的
+  // 「闭环变更 N / M (X%)」是同一个 closed_loop/total_changes，会在同一份日报里重复出现。
+  // 闭环数归 SPEC 闭环统计节（带 75/77 绝对数，信息更全）；本表只放"质量"类指标。
+
+  // 变更一次通过率 = 零返工变更数 / 总变更（数据源：collect-ai 的 spec_stats.zero_rework_changes）。
+  // 分母**刻意**与「### SPEC 闭环统计」同集合（都是 spec_stats.total_changes）→ 两处可直接对照；
+  // 也因此共享同一个 --user 归属过滤，不会出现"闭环数算本人、通过率算全局"的错位。
+  // ⚠️ 命名硬约束：本指标叫「变更一次通过率」，**不得**改回「首次通过率」——后者在本项目
+  // 已归属 rd-auto 的 first_pass_rate（按角色/派发一次过，见 stats.js 的 avg_first_pass_rate /
+  // Grafana ai_dispatch_first_pass_rate，且被长期规划文档列为 KPI）。一处两名会互相污染。
+  // 缺 rework_count 的变更不计入分子（宁可少算不虚高），collect-ai 会写 stderr 提示。
+  const zeroReworkRate = sum.spec_stats && sum.spec_stats.total_changes
+    ? Math.round((sum.spec_stats.zero_rework_changes / sum.spec_stats.total_changes) * 100) + '%'
     : '—';
-  lines.push(`| 首次通过率 | ${firstPass} |`);
+  lines.push(`| 变更一次通过率 | ${zeroReworkRate} |`);
+  const totalRework = (sum.spec_stats && sum.spec_stats.total_rework_count) || 0;
+  lines.push(`| 返工总次数 | ${totalRework} |`);
   lines.push(`| 总耗时 | ${Math.round((sum.total_wall_clock_ms || 0) / 60000)}m |`);
+
+  // 返工角色分布：次数降序，0 次角色不列；无返工时整行不输出（0 次不是信息）。
+  if (totalRework > 0) {
+    const dist = Object.entries(sum.spec_stats.rework_by_role || {})
+      .filter(([, n]) => n > 0)
+      .sort((a, b) => b[1] - a[1])
+      .map(([role, n]) => `${role} ${n}`)
+      .join(' / ');
+    if (dist) lines.push(`- 返工分布：${dist}`);
+  }
   lines.push('');
 
   // 会话 Token 统计
@@ -893,9 +926,10 @@ function renderAiSection(ai, lines) {
     lines.push('');
   }
 
-  // Concerns 统计
+  // 评审问题统计（数据源：Reviewer/Debate 写入 shared-state 的 concerns.json，
+  // P0/P1 一票否决与提交门禁消费的同一份数据）。标题不用内部术语 "Concerns"。
   if (sum.concern_stats) {
-    lines.push('### Concerns 统计');
+    lines.push('### 评审问题统计');
     lines.push('| 级别 | 发现 | 已关闭 | 关闭率 |');
     lines.push('|------|------|--------|--------|');
     const cs = sum.concern_stats;
@@ -907,7 +941,7 @@ function renderAiSection(ai, lines) {
     // Issue !278: 缺 author 被采集端跳过的条数在日报明示，不再静默归零
     if (cs.missing_author_skipped) {
       lines.push('');
-      lines.push(`> ⚠ ${cs.missing_author_skipped} 条 concerns 缺 author 字段，未计入上表（需升级 Reviewer/Debate 写入端必填 author）`);
+      lines.push(`> ⚠ 另有 ${cs.missing_author_skipped} 条评审问题缺 author 字段，未计入上表（需升级 Reviewer/Debate 写入端必填 author）`);
     }
     lines.push('');
   }

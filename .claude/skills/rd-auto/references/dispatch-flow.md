@@ -166,17 +166,18 @@ codex dispatch 失败（auth / timeout / network / command_not_found / unparseab
 ```text
 if result.exit_status === "BLOCKED":
     # 1. raw output 已落盘（dispatchSubAgent 内部 _writeCodexLog 完成）
-    # 2. 主会话 read-modify-write concerns.json（write-shared-state 无 --append，必须 RMS）
-    existing = read-shared-state <change> --key concerns        # 拿到当前数组
-    existing.push({
-        "id": "CODEX-BLOCKED-<timestamp>",
-        "severity": "P1",
-        "status": "open",
-        "type": "codex-dispatch-failed",
-        "title": "codex dispatch BLOCKED: " + result.escalate_reason,
-        "author": "<git_user>"
-    })
-    write-shared-state <change> --key concerns --json '<serialized existing>'  # 全量替换
+    # 2. 追加 concern 用 --merge 按 id 合并（issue !296：默认整体覆盖，
+    #    只重发增量的裸写会抹掉历史条目，禁止）
+    write-shared-state <change> --key concerns --merge --json '{
+        "p1": [{
+            "id": "CODEX-BLOCKED-<timestamp>",
+            "severity": "P1",
+            "status": "open",
+            "type": "codex-dispatch-failed",
+            "title": "codex dispatch BLOCKED: " + result.escalate_reason,
+            "author": "<git_user>"
+        }]
+    }'
     # 3. 提示 PM 决策（修复 codex 鉴权 / 显式切到 claude / abort change）
     halt with "codex dispatch BLOCKED — PM must decide"
 ```

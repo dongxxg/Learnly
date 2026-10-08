@@ -79,7 +79,10 @@ function mkModelIoRecord(overrides = {}) {
     model: { modelId, providerId: 'pid', role, source: 'config', variant: 'nothink' },
     response: {
       usage: {
-        inputTokens: input, outputTokens: output,
+        // Issue #290 实测：camelCase inputTokens 已含 cache 读（inputTokens = 净input +
+        // cacheReadTokens，样例 37133 = 9485 + 27648）。input 参数语义为净 input，
+        // 落盘写 gross 还原真实字段形状。
+        inputTokens: input + cacheRead, outputTokens: output,
         totalTokens: input + output + cacheRead + cacheWrite,
         cacheReadTokens: cacheRead, cacheWriteTokens: cacheWrite,
       },
@@ -218,6 +221,52 @@ test('collect-ai zcode 会话与 Claude 会话融合采集（feature/930 融合�
   const claudeBucket = out.summary.session_by_project['work-repos-demo'];
   assert.ok(claudeBucket, 'Claude fixture 桶应存在');
   assert.strictEqual(claudeBucket.input_tokens, 7777, 'Claude 桶只含 fixture 数据');
+});
+
+test('collect-ai zcode model-io 净 input 口径（issue #290：inputTokens 含 cache 读不双计）', (t) => {
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'cai-zcode-netinput-'));
+  t.after(() => fs.rmSync(work, { recursive: true, force: true }));
+  const rollout = path.join(work, 'rollout');
+  // ① providerMetadata snake 字段优先：净 input 直接采用（不重复扣）
+  writeModelIo(rollout, 'model-io-sess_net_aaaa.jsonl', [
+    mkModelIoRecord({ input: 9485, output: 1800, cacheRead: 27648, cacheWrite: 100 }),
+  ]);
+  // fixture 写 gross inputTokens = 9485 + 27648 = 37133（issue 实证样例），并注入 snake 原始字段
+  const grossFile = path.join(rollout, 'model-io-sess_net_aaaa.jsonl');
+  const lines = fs.readFileSync(grossFile, 'utf-8').trim().split('\n').map((l) => {
+    const rec = JSON.parse(l);
+    rec.response.providerMetadata = {
+      anthropic: {
+        usage: {
+          input_tokens: 9485, output_tokens: 1800,
+          cache_read_input_tokens: 27648, cache_creation_input_tokens: 100,
+        },
+      },
+    };
+    return JSON.stringify(rec);
+  });
+  fs.writeFileSync(grossFile, lines.join('\n') + '\n');
+  // ② 无 providerMetadata：camel 兜底扣 cacheRead（gross 700 - 300 = 净 400）
+  writeModelIo(rollout, 'model-io-sess_net_bbbb.jsonl', [
+    mkModelIoRecord({ input: 400, output: 40, cacheRead: 300, cacheWrite: 50 }),
+  ]);
+  const out = runCollectAi(work, DATE, zcodeEnv(work, rollout));
+  // 净 input = 9485 + 400；cache_read = 27648 + 300 —— input 不再含 cache 读
+  assert.strictEqual(out.summary.session_input_tokens, 9885);
+  assert.strictEqual(out.summary.session_cache_read_input_tokens, 27948);
+  assert.strictEqual(out.summary.session_output_tokens, 1840);
+  assert.strictEqual(out.summary.session_cache_creation_input_tokens, 150);
+  // render 的 Token 用量公式（input+output+cache_read）不再 cache 双计：
+  // 旧口径 input=37133+700 会得到 (37133+700)+1840+27948 ≈ 2 倍虚高
+  const rendered = out.summary.session_input_tokens + out.summary.session_output_tokens
+    + out.summary.session_cache_read_input_tokens;
+  assert.strictEqual(rendered, 9885 + 1840 + 27948);
+  const byProject = out.summary.session_by_project.zcode;
+  assert.strictEqual(byProject.input_tokens, 9885);
+  assert.strictEqual(byProject.cache_read_tokens, 27948);
+  const byModel = out.summary.session_by_model['glm-5.2'];
+  assert.strictEqual(byModel.input_tokens, 9885);
+  assert.strictEqual(byModel.cache_read_tokens, 27948);
 });
 
 test('collect-ai zcode 自然调度（usage.jsonl）token 入 by_backend（normalizeUsageJsonlTokens）', (t) => {

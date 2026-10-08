@@ -109,12 +109,20 @@ test_t2_framework_edit() {
     assert "pre-tool-use-tasks-guard.sh 不含旧 .claude/.framework-edit 检查" \
            "$(! grep -q '\.claude/\.framework-edit' "$TASKS_GUARD" && echo true || echo false)"
 
-    # 攻击面加固 (DBC-002): _BYPASS_FILES_RE 含无路径前缀兜底
+    # 攻击面加固 (DBC-002): _BYPASS_FILES_RE 必须含「无路径前缀」兜底分支。
+    # 这里断言正则的**行为**而不是源码字面量：该正则已重构为分组形态
+    # `(...|\.(framework-edit|push-challenge|branch-challenge))`，pin 字面量会随重构失效
+    # —— 本用例曾因此在 HEAD 上长期变红（字面量 pin 的是重构前的平铺写法）。
+    # 用例命令取 `cd .harness && touch X`：路径前缀被 ` && ` 断开，只有无前缀分支能命中，
+    # 故命中即证明兜底存在（有前缀分支在此形态下必然不匹配）。
+    # 取值需再解一层双引号转义（源码内是 `\\.`，bash 求值后才是正则的 `\.`）。
+    local _bypass_re
+    _bypass_re=$(sed -n 's/^_BYPASS_FILES_RE="\(.*\)"$/\1/p' "$GIT_GUARD" | head -1 | sed 's/\\\\/\\/g')
     assert "git-guard _BYPASS_FILES_RE 含无路径前缀 \\.framework-edit 兜底" \
-           "$(grep -qE '_BYPASS_FILES_RE=.*\\\\\.framework-edit' "$GIT_GUARD" && echo true || echo false)"
+           "$(echo 'cd .harness && touch .framework-edit' | grep -qE "$_bypass_re" && echo true || echo false)"
 
     assert "git-guard _BYPASS_FILES_RE 含无路径前缀 \\.push-challenge 兜底" \
-           "$(grep -qE '_BYPASS_FILES_RE=.*\\\\\.push-challenge' "$GIT_GUARD" && echo true || echo false)"
+           "$(echo 'cd .harness && touch .push-challenge' | grep -qE "$_bypass_re" && echo true || echo false)"
 
     # session-start.sh 清理 .harness/.framework-edit
     assert "session-start.sh 清理 .harness/.framework-edit" \
@@ -127,16 +135,21 @@ test_t2_framework_edit() {
 test_t3_push_markers() {
     echo "=== T3: push 标记 → .harness/ + 死代码清理 ==="
 
-    # pre-push CHALLENGE_FILE/TOKEN_FILE 用 .harness/
-    assert "pre-push CHALLENGE_FILE 用 .harness/.push-challenge" \
-           "$(grep -q 'CHALLENGE_FILE=".harness/.push-challenge"' "$PRE_PUSH" && echo true || echo false)"
+    # pre-push CHALLENGE_FILE/TOKEN_FILE 落在 MARKER_DIR（其锚点为 .harness/，见本段末条断言）
+    # !320 起 marker 路径由状态根 MARKER_DIR 拼接（跨仓推送时相对 cwd 会写错位置）
+    assert "pre-push CHALLENGE_FILE 用 \${MARKER_DIR}/.push-challenge" \
+           "$(grep -q 'CHALLENGE_FILE="\${MARKER_DIR}/.push-challenge"' "$PRE_PUSH" && echo true || echo false)"
 
-    assert "pre-push TOKEN_FILE 用 .harness/.push-approved" \
-           "$(grep -q 'TOKEN_FILE=".harness/.push-approved"' "$PRE_PUSH" && echo true || echo false)"
+    assert "pre-push TOKEN_FILE 用 \${MARKER_DIR}/.push-approved" \
+           "$(grep -q 'TOKEN_FILE="\${MARKER_DIR}/.push-approved"' "$PRE_PUSH" && echo true || echo false)"
 
-    # pre-push 提示文字用 .harness/.push-approved
-    assert "pre-push 提示文字用 .harness/.push-approved" \
-           "$(grep -q 'echo.*> \.harness/\.push-approved' "$PRE_PUSH" && echo true || echo false)"
+    # pre-push 提示文字用绝对路径 ${MARKER_DIR}/.push-approved（!320：PM/AI 照此写 token）
+    assert "pre-push 提示文字用 \${MARKER_DIR}/.push-approved" \
+           "$(grep -q 'echo.*> \${MARKER_DIR}/\.push-approved' "$PRE_PUSH" && echo true || echo false)"
+
+    # 落点不变式：MARKER_DIR 仍锚定 .harness/（marker 仍在项目级状态目录下，不挪去别处）
+    assert "pre-push MARKER_DIR 锚定 .harness/" \
+           "$(grep -q 'MARKER_DIR=.*\.harness' "$PRE_PUSH" && echo true || echo false)"
 
     # DBC-003: pre-push $_HARNESS_DIR 死代码已删（不再有 config --get harness.backend-dir）
     assert "pre-push 不含 _HARNESS_DIR 计算（死代码已删）" \

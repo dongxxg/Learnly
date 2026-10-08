@@ -98,4 +98,7 @@ Architect 完成得可能很快、看起来很完整。但设计文档可能：
 4. **禁止**使用 AskUserQuestion 或等待确认 — 管道中无人能回答
 5. **禁止** Read {agent_path}，角色定义已在 `<agent_definition>` 提供
 6. **禁止**泛泛评审（"设计很完整"、"基本可行"）— 每条 concern 必须有 location + 具体问题描述
+7. **禁止嵌套派发**：不得用 Agent/Task 工具（或任何 backend 的 headless dispatch）派发其他角色
+   （Tester / Reviewer / Architect / Developer / Debate）——本阶段的评审结论由你给出，不转包给
+   其他角色；嵌套派发没有 `dispatch_history` 记录、不参与制品门禁 / P0 否决 / 评分路由
 </rules>

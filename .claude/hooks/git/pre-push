@@ -14,14 +14,33 @@ set -euo pipefail
 # 改此值须同步：权威源 ttl_seconds + 下方过期提示文案的分钟数。
 PUSH_TTL_SECONDS=300
 
-# 读取推送信息（不使用，仅消费 stdin）
-cat >/dev/null
+# 读取推送信息（每行: local-ref local-sha remote-ref remote-sha）
+# 必须保留内容：behind/分叉判定的对象是【本次推送的目标分支】本身，
+# 而非当前 HEAD（推非 HEAD 分支时两者无关，用 HEAD 计数会误拦/漏拦，issue !303）。
+PUSH_REFS=$(cat 2>/dev/null || true)
 
-PROJECT_DIR="${QODER_PROJECT_DIR:-${CLAUDE_PROJECT_DIR:-.}}"
-cd "$PROJECT_DIR"
+# 【!320】两个根必须分开，跨仓推送时二者不同（实测：git 执行本 hook 时 cwd 恒为被推仓根，
+# 与发起 push 的会话目录无关）：
+#   REPO_ROOT   —— 被推仓库根。fetch / rev-parse HEAD / rev-list / merge-base 一律在此执行；
+#                  marker 状态缺失时的兜底落点。旧实现把 git 操作挂在会话根上，跨仓推送时
+#                  挑战码绑定的是无关仓 HEAD（hash=unknown），且分叉判定因对象缺失静默
+#                  fail-open —— 门禁形同虚设（issue !320 (b) 错仓级）。
+#   PROJECT_DIR —— marker 状态根（marker 文件写入处）。优先 agent 宿主注入的会话根，因为
+#                  AI 的相对路径 .harness/ 正是相对它解析，落点与 AI 的写入位置天然一致；
+#                  两者都缺失时回退被推仓库根（确定性、可达、per-repo 隔离）。
+#                  口径来源（逐字一致）：harness-rules.yaml → push_approval.security.cleanup.cwd_fallback
+#                  = CLAUDE_PROJECT_DIR_or_git_toplevel。
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null \
+             || git rev-parse --absolute-git-dir 2>/dev/null \
+             || echo "$PWD")"
+[ -d "$REPO_ROOT" ] || REPO_ROOT="$PWD"
+# cd 失败不阻断（set -e 下必须 || true）：后续所有 git 操作仍能靠 PWD 兜底。
+cd "$REPO_ROOT" 2>/dev/null || true
 
-# 仓库根目录。审批 marker 文件统一放在 .harness/（项目级状态目录）。
-REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || echo .)"
+PROJECT_DIR="${QODER_PROJECT_DIR:-${CLAUDE_PROJECT_DIR:-}}"
+[ -n "$PROJECT_DIR" ] || PROJECT_DIR="$REPO_ROOT"
+# ${PROJECT_DIR%/} 去掉可能的尾斜杠，避免拼出 //.harness
+MARKER_DIR="${PROJECT_DIR%/}/.harness"
 
 # CI 自动批准
 if [ "${CLAUDE_PUSH_AUTO_APPROVE:-}" = "1" ]; then
@@ -31,59 +50,94 @@ fi
 # ============================================================
 # Behind / 分叉检查（详见 ai-git-commit-spec.md「操作顺序」）
 # ============================================================
-# behind = 远端存在而本地没有的 commit。必须区分两种形态（Issue !284）：
+# 逐条遍历本次推送的 refspec，只对「分支更新」行判定：
+#   - 非 refs/heads/*（tag 等）跳过
+#   - lsha=全零：新建远端分支，无远端历史可比 → 跳过
+#   - rsha=全零：删除远端分支，无推送内容 → 跳过
+# 计数取自 refspec 自带的 sha（rev-list lsha..rsha / rsha..lsha），不用 @{u}：
+# 推非当前检出分支、或分支没有 upstream 时同样正确。
+# 必须区分两种形态（Issue !284）：
 #   ① 真落后（behind>0 且 ahead=0）：本地无新工作，push 必然 non-FF 被服务端拒
 #      → 拒绝并引导 git pull --rebase，防被拒后误用 --force。
 #   ② 分叉（behind>0 且 ahead>0）：两侧各有提交，典型形态是个人分支 rebase 重写
 #      历史。ai-git-commit-spec 允许个人分支 --force-with-lease（lease 自身保证
 #      「远端有新提交则推送失败」），一刀切拒绝会堵死该合规路径 → 放行进挑战码审批。
-#      共享分支（main/master/release/*，以及与个人命名同形的团队分支——由 PM 用
-#      git config harness.shared-branches 声明）重写历史是红线 → 维持拒绝。
+#      共享分支（main/master/release/*/develop/dev，以及与个人命名同形的团队分支——
+#      由 PM 用 git config harness.shared-branches 声明）重写历史是红线 → 维持拒绝。
 # fetch 10 秒超时；失败（如离线）则跳过检查（fail-open，不阻塞 push）。
-CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
-if [ -n "$CURRENT_BRANCH" ] && [ "$CURRENT_BRANCH" != "HEAD" ]; then
+ZERO_SHA="0000000000000000000000000000000000000000"
+if [ -n "$PUSH_REFS" ]; then
     _FETCH_OUT=$(timeout 10 git fetch --quiet 2>&1 || echo "")
     if [ -z "$_FETCH_OUT" ]; then
-        # @{u}=upstream；HEAD..@{u} 计数为远端领先本地的 commit 数
-        _BEHIND=$(git rev-list --count HEAD..@{u} 2>/dev/null || echo "0")
-        if [ "$_BEHIND" -gt 0 ] 2>/dev/null; then
-            _AHEAD=$(git rev-list --count @{u}..HEAD 2>/dev/null || echo "0")
-            _IS_SHARED=0
-            case "$CURRENT_BRANCH" in
-                main|master|release/*) _IS_SHARED=1 ;;
+        while read -r _lref _lsha _rref _rsha; do
+            case "$_rref" in
+                refs/heads/*) ;;
+                *) continue ;;
             esac
-            # feature/930 这类「与个人分支命名同形的团队分支」需 PM 显式声明，
-            # glob 列表逗号分隔：git config harness.shared-branches "feature/930,feature/830"
-            _SHARED_CFG=$(git config --get harness.shared-branches 2>/dev/null || echo "")
-            if [ -n "$_SHARED_CFG" ]; then
-                IFS=',' read -ra _SHARED_PATS <<< "$_SHARED_CFG"
-                for _pat in "${_SHARED_PATS[@]}"; do
-                    _pat="${_pat# }"; _pat="${_pat% }"
-                    # shellcheck disable=SC2053  # 右侧不加引号 = 有意 glob 匹配
-                    [[ -n "$_pat" && "$CURRENT_BRANCH" == $_pat ]] && _IS_SHARED=1
-                done
+            [ "$_lsha" != "$ZERO_SHA" ] || continue
+            [ "$_rsha" != "$ZERO_SHA" ] || continue
+            _branch="${_rref#refs/heads/}"
+            _BEHIND=$(git rev-list --count "${_lsha}..${_rsha}" 2>/dev/null || echo "0")
+            _AHEAD=$(git rev-list --count "${_rsha}..${_lsha}" 2>/dev/null || echo "0")
+            # rev-list 失败（对象缺失等）→ 取到空/非数字，归 0 跳过检查（fail-open）
+            case "$_BEHIND" in ''|*[!0-9]*) _BEHIND=0 ;; esac
+            case "$_AHEAD" in ''|*[!0-9]*) _AHEAD=0 ;; esac
+            if [ "$_BEHIND" -gt 0 ] 2>/dev/null; then
+                _IS_SHARED=0
+                # 内置名单与服务端 pre-receive 的 merge 白名单口径对齐（develop/dev 同待遇）
+                case "$_branch" in
+                    main|master|release/*|develop|dev) _IS_SHARED=1 ;;
+                esac
+                # feature/930 这类「与个人分支命名同形的团队分支」需 PM 显式声明，
+                # glob 列表逗号分隔：git config harness.shared-branches "feature/930,feature/830"
+                _SHARED_CFG=$(git config --get harness.shared-branches 2>/dev/null || echo "")
+                if [ -n "$_SHARED_CFG" ]; then
+                    IFS=',' read -ra _SHARED_PATS <<< "$_SHARED_CFG"
+                    for _pat in "${_SHARED_PATS[@]}"; do
+                        _pat="${_pat# }"; _pat="${_pat% }"
+                        # shellcheck disable=SC2053  # 右侧不加引号 = 有意 glob 匹配
+                        [[ -n "$_pat" && "$_branch" == $_pat ]] && _IS_SHARED=1
+                    done
+                fi
+                if [ "$_AHEAD" -gt 0 ] && [ "$_IS_SHARED" -eq 0 ]; then
+                    echo "   ⚠️  分支 ${_branch} 与远端历史分叉（远端独有 ${_BEHIND} / 本地独有 ${_AHEAD}），判定为个人分支重写历史。"
+                    echo "   已按 ai-git-commit-spec 个人分支 --force-with-lease 路径放行，继续挑战码审批。"
+                    echo "   ⚠️  --force-with-lease 仅在确认远端独有提交皆为己方旧版本时使用；"
+                    echo "       若其中含他人提交，请先 git fetch + git rebase 后再推，勿直接 lease 强推。"
+                elif [ "$_AHEAD" -gt 0 ]; then
+                    echo "   共享分支 ${_branch} 与远端分叉（本地独有 ${_AHEAD} 个重写 commit），禁止 push"
+                    echo "   禁止重写共享分支历史（红线）；请执行: git pull --rebase 后正常 push"
+                    echo "   确需重写共享分支由 PM 终端人工操作"
+                    exit 1
+                else
+                    echo "   本地分支 ${_branch} 落后远端 ${_BEHIND} 个 commit，禁止 push"
+                    echo "   请执行: git pull --rebase"
+                    echo "   处理冲突后: git rebase --continue → 重新 push"
+                    echo "   禁止用 git push --force 解决 non-fast-forward"
+                    exit 1
+                fi
             fi
-            if [ "$_AHEAD" -gt 0 ] && [ "$_IS_SHARED" -eq 0 ]; then
-                echo "   ⚠️  本地与远端历史分叉（远端独有 ${_BEHIND} / 本地独有 ${_AHEAD}），判定为个人分支重写历史。"
-                echo "   已按 ai-git-commit-spec 个人分支 --force-with-lease 路径放行，继续挑战码审批。"
-            elif [ "$_AHEAD" -gt 0 ]; then
-                echo "   共享分支 ${CURRENT_BRANCH} 与远端分叉（本地独有 ${_AHEAD} 个重写 commit），禁止 push"
-                echo "   禁止重写共享分支历史（红线）；请执行: git pull --rebase 后正常 push"
-                echo "   确需重写共享分支由 PM 终端人工操作"
-                exit 1
-            else
-                echo "   本地落后远端 ${_BEHIND} 个 commit，禁止 push"
-                echo "   请执行: git pull --rebase"
-                echo "   处理冲突后: git rebase --continue → 重新 push"
-                echo "   禁止用 git push --force 解决 non-fast-forward"
-                exit 1
-            fi
-        fi
+        done <<< "$PUSH_REFS"
     fi
 fi
 
-CHALLENGE_FILE=".harness/.push-challenge"
-TOKEN_FILE=".harness/.push-approved"
+# 【!320】状态目录必须存在，且必须显式创建：
+# 重定向失败会被 set -e 打成 exit 1 **且不打印任何挑战码** → AI/PM 无从下手、
+# 每次重推同样失败 = 永久死锁（比"空转"更糟，实测见 issue !320 (a) 死锁级）。
+# ⚠️ 位置约束：本段必须留在上面的分叉硬拒绝块之后。共享分支分叉的 exit 1 是红线，
+# 不得受状态目录可写性影响；若把本段上移，fail-open 的 exit 0 会把红线一并吞掉
+# （回归用例 T19 锁死此顺序）。
+# fail-open 口径与 git-guard 第 5 节、harness-rules.yaml push_approval.security.cleanup
+# .failure_policy=warn_not_block 一致：目录不可创建（只读挂载等）时挑战码永远无法满足，
+# 阻塞 push 无意义。
+mkdir -p "$MARKER_DIR" 2>/dev/null || true
+if [ ! -d "$MARKER_DIR" ]; then
+    echo "   ⚠️ 状态目录 ${MARKER_DIR} 不可创建，push 审批门禁不可用，本次放行（fail-open）" >&2
+    echo "   ⚠️ 需要审批门禁请确保其可写，或用 QODER_PROJECT_DIR/CLAUDE_PROJECT_DIR 指向可写目录" >&2
+    exit 0
+fi
+CHALLENGE_FILE="${MARKER_DIR}/.push-challenge"
+TOKEN_FILE="${MARKER_DIR}/.push-approved"
 
 SHORT_HASH=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 COMMIT_SUBJECT=$(git log -1 --format="%s" 2>/dev/null || echo "unknown")
@@ -109,8 +163,12 @@ is_expired() {
 print_approval_hint() {
     local nonce="$1"
     echo "   PM 审批方式（二选一）:"
-    echo "   1. 手动: echo ${nonce} > .harness/.push-approved && git push"
-    echo "   2. 自动: 回复 AI '批准推送'，AI 自动写入 token 并重推"
+    # 【!320】一律输出绝对路径：跨仓推送时 hook 的 cwd（=被推仓）不是状态根
+    #（状态根可能是宿主注入的会话目录），相对路径 .harness/ 会让 PM/AI 写到别处，
+    # token 永远匹配不上。去掉尾随的 `&& git push`——重推须由 AI 用原命令执行。
+    echo "   1. 手动: echo ${nonce} > ${MARKER_DIR}/.push-approved"
+    echo "   2. 自动: 回复 AI '批准推送'，AI 自动写入 token 后重推"
+    echo "   ⚠️ 上行为绝对路径：跨仓推送时 cwd 不是状态根，相对路径会写到别处（!320）。"
     echo "   ⚠️ push 完成前不得创建新 commit（否则挑战码失效）。"
 }
 

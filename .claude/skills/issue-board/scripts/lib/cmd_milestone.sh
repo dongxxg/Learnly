@@ -107,14 +107,20 @@ print(json.dumps(filtered, ensure_ascii=False))
 
   # Combine milestone metadata + raw issues into one JSON document, then hand
   # to the python builder on stdin (replaces jq slurpfile).
+  # 两个文档经 stdin 单流传递（各占一行，均为 json.dumps 输出，不含字面换行），
+  # 不经 env：单个 env/argv 字符串上限 MAX_ARG_STRLEN=128KiB，而跨项目
+  # milestone（如 630 战役 ~138 项）的 issue 全量 JSON 轻易超限，会导致
+  # execve 失败 → python 收到空串 → JSONDecodeError。
   local combined
-  combined=$(MS_NORMALIZED="${ms_normalized}" ISSUES_RESP="${issues_resp}" python3 -c '
-import json, os
-out = {
-    "milestone": json.loads(os.environ["MS_NORMALIZED"]),
-    "issues": json.loads(os.environ["ISSUES_RESP"]),
-}
-print(json.dumps(out, ensure_ascii=False))
+  combined=$( { printf '%s\n' "${ms_normalized}"; printf '%s\n' "${issues_resp}"; } | python3 -c '
+import sys, json
+lines = sys.stdin.read().splitlines()
+milestone = json.loads(lines[0]) if lines else {}
+# 服务端若返回美化格式，issue 文档会跨多行——按行还原，不做单行假设。
+issues = json.loads("\n".join(lines[1:])) if len(lines) > 1 else []
+if not isinstance(issues, list):
+    issues = []
+print(json.dumps({"milestone": milestone, "issues": issues}, ensure_ascii=False))
 ')
 
   local output

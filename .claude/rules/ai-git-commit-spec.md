@@ -4,7 +4,7 @@
 
 ## 操作顺序
 
-commit 前 fetch；push 前 fetch。若 behind → `git pull --rebase`（**禁止** 裸 `git pull` / `git merge` 同步远端，merge commit 被 pre-receive 拒绝）。push 走 Challenge-Response 审批。
+commit 前 fetch；push 前 fetch。若 behind → `git pull --rebase`（**禁止** 裸 `git pull` / `git merge` 同步远端，merge commit 被 pre-receive 拒绝）。push 走 Challenge-Response 审批——目标仓装了 pre-push hook 时由仓级门禁审批（按推送 refspec 判定 behind/分叉），未装的仓由会话级 git-guard 兜底，两者挑战码同名同格式、审批指令通用。
 
 ## 红线（100% 拒绝）
 
@@ -31,6 +31,7 @@ commit 前 fetch；push 前 fetch。若 behind → `git pull --rebase`（**禁�
 - **操作者**：`[AI-{git用户名}.{角色}]`（用户名须与 `git config user.name` 一致，hook 校验）；无法获取时 `[AI·{角色}]`；人提交 `[H-{git用户名}]`
 - **模块名**：从 `git diff --name-only` 提取真实变更域（如 `git-guard`、`框架配置`）；禁止复用 change 名或与变更无关的通用名
 - **摘要**：≤72 字符、动宾结构、不以句号结尾；禁模糊词（`修改`/`优化`/`update code`）、禁用模块名代替 type
+- **总长限制**：message 全文 ≤500 字符——本地 commit-msg（规则 4）与服务端 pre-receive（规则 4）**双重强制**，超限直接拒绝；被拒时精简正文，保留首行 + body 首行 + 关键变更点
 
 ## 粒度（原子提交）
 

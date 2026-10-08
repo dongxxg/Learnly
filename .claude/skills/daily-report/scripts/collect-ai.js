@@ -180,7 +180,13 @@ function emptyOutput(date, cwd) {
       // 新增维度：按 backend 分组聚合 token（Claude/Codex 不混合求和）
       by_backend: {},
       backend_fallback_count: 0,
-      spec_stats: { total_changes: 0, closed_loop: 0, open: 0, by_phase: {} },
+      // zero_rework_changes / total_rework_count / rework_by_role：变更一次通过率与返工总次数
+      // 的数据源（见下方 specOwned 累加处的口径说明）。老日报 JSON 无这三个键，schema 亦未列入
+      // required，此处恒发射零值以简化渲染侧判空。
+      spec_stats: {
+        total_changes: 0, closed_loop: 0, open: 0, by_phase: {},
+        zero_rework_changes: 0, total_rework_count: 0, rework_by_role: {},
+      },
       concern_stats: { total: 0, p0_found: 0, p0_closed: 0, p1_found: 0, p1_closed: 0, p2_found: 0, p2_closed: 0, missing_author_skipped: 0, details: [] },
       // 采样缺口计数：usage.jsonl 中 tokens:null 的短命 subagent 记录数
       sampled_gap_count: 0,
@@ -280,6 +286,27 @@ function normalizeTokenUsageForReport(rawTokens, backend) {
   return { input: null, output: null, cached: null, reasoning: null, total: null, model: null };
 }
 
+// Issue #327 残留：把 pipeline dispatch 的 token_usage 收口成 schema 允许的形状。
+// daily-report.schema.json#/$defs/TokenUsage 必填 input_tokens/output_tokens/
+// cache_read_input_tokens/cache_creation_input_tokens/model 且 additionalProperties:false；
+// mark-dispatch 的 {total} 单值路径（codex/zcode 显式 --tokens N 兜底）只有 total 一个字段。
+// 补齐口径与 collectUsageJsonl 的 usage.jsonl 虚拟任务一致：缺字段补 0、model 缺省 null；
+// total/backend 原样保留。null / 非对象原样返回（schema 允许 token_usage 为 null）。
+function conformDispatchTokenUsage(tokens) {
+  if (!tokens || typeof tokens !== 'object') return tokens;
+  const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
+  const out = {
+    input_tokens: num(tokens.input_tokens),
+    output_tokens: num(tokens.output_tokens),
+    cache_read_input_tokens: num(tokens.cache_read_input_tokens),
+    cache_creation_input_tokens: num(tokens.cache_creation_input_tokens),
+    model: typeof tokens.model === 'string' && tokens.model.length > 0 ? tokens.model : null,
+  };
+  if (typeof tokens.total === 'number') out.total = tokens.total;
+  if (typeof tokens.backend === 'string' && tokens.backend.length > 0) out.backend = tokens.backend;
+  return out;
+}
+
 // Finalize by_backend bucket：dominant model + 未见过非 null 的字段设 null
 function finalizeByBackend(summary) {
   for (const bucket of Object.values(summary.by_backend)) {
@@ -356,6 +383,22 @@ function main() {
 
   const targetDate = args.options.date;
   const cwd = process.cwd();
+
+  // Issue #324: spec_stats 归属过滤用的当前用户。
+  // 口径说明（软约定，非强制）：--user 来自 whoami.js 的邮箱前缀（SKILL.md:102），
+  // state.caller 来自 stateInit 时的 `git config user.name`（state-store.js:119）——
+  // 两者本不是同一个东西，但 .claude/skills/rd-auto/references/shared-state.md:65 明写
+  // "author = git 用户名，与 collect-ai.js --user 匹配"，本文件既有的 concerns 过滤
+  // （collectConcernStats 的 concern.author 比对）已建立在这一约定上，此处沿用同口径。
+  // 空串（未传 / 传空白）→ 不过滤，保持全局累加的旧行为（向后兼容）。
+  const specUser = (args.options.user || '').trim();
+  // Issue #324: 被归属过滤排除的 change 数，仅供 stderr 提示（schema SpecStats 是
+  // additionalProperties:false，禁止新增计数字段）。
+  let specSkippedOtherCaller = 0;
+  // 缺 rework_count 的 change 数，同样只进 stderr 提示（不进日报 JSON）：这类变更按"非一次
+  // 通过"处理（不计入分子），但**仍计入分母**，须让用户知道分子被保守低估了。见下方累加处。
+  let specMissingReworkCount = 0;
+
   // Issue !239: 主仓 + .harness-projects 子仓的 tasks 目录都扫，子仓 pipeline dispatch 补采。
   // 全局 token/session（collectUsageJsonl / collectSessionTokens）仍在下方只主仓采一次。
   const tasksDirs = [path.join(cwd, '.harness', 'tasks')];
@@ -421,16 +464,67 @@ function main() {
 
       // --- SPEC stats (global snapshot, not date-filtered) ---
       // Must be before the dispatch-matching continue (C1 from design-review)
-      const currentPhase = state.current_phase || '';
-      const completedAt = state.completed_at || null;
-      output.summary.spec_stats.total_changes += 1;
-      if (TERMINAL_PHASES.has(currentPhase) || completedAt) {
-        output.summary.spec_stats.closed_loop += 1;
-      } else {
-        output.summary.spec_stats.open += 1;
-      }
-      if (currentPhase) {
-        output.summary.spec_stats.by_phase[currentPhase] = (output.summary.spec_stats.by_phase[currentPhase] || 0) + 1;
+      //
+      // Issue #324: 归属过滤。原来四个累加点无条件执行，而扫描面含 .harness-projects
+      // 子仓 → 多人共用 workspace（或 clone/pull 带来的他人 change）会混进分母，把本人
+      // 闭环率稀释（实测 zhouling 12 个全闭环却显示 15/19）。
+      // 口径（与同文件 collectConcernStats 的 --user 过滤保持一致）：
+      //   - 未传 --user            → specOwned 恒真，全局累加，行为与修复前完全一致
+      //   - caller 为空 / 缺失      → **不计入**。归属未知的 change 不能断言属于本人；
+      //     计入即"未经验证的假设"，在共享 workspace 下正是 #324 的缺陷本身。
+      //     本仓实证：99 个受 git 跟踪的 pipeline-state.json 中 43 个缺 caller，且这批
+      //     是 sv 缺失、current_phase=merge-prep 的历史/演示数据，计入只会掩盖真实闭环率。
+      //     代价（已知并接受）：schema_version < 6 的老 change 若确属本人，也会被排除 →
+      //     历史闭环率整体下移。取舍理由：这是**个人**指标，宁可少算本人的老数据，也不能
+      //     把他人/来路不明的数据算成本人；同文件 concerns 过滤（!186/!278 "缺 author
+      //     则 skip"）已确立同一取舍，两处口径若不一致会让日报自相矛盾。
+      //   - caller 非空且 !== --user → 不计入（他人 change，即 #324 的稀释源）
+      const specCaller = String(state.caller || '').trim();
+      const specOwned = !specUser || specCaller === specUser;
+      if (!specOwned) specSkippedOtherCaller += 1;
+
+      if (specOwned) {
+        const currentPhase = state.current_phase || '';
+        const completedAt = state.completed_at || null;
+        output.summary.spec_stats.total_changes += 1;
+        if (TERMINAL_PHASES.has(currentPhase) || completedAt) {
+          output.summary.spec_stats.closed_loop += 1;
+        } else {
+          output.summary.spec_stats.open += 1;
+        }
+        if (currentPhase) {
+          output.summary.spec_stats.by_phase[currentPhase] = (output.summary.spec_stats.by_phase[currentPhase] || 0) + 1;
+        }
+
+        // --- 变更一次通过率 / 返工总次数（数据源：pipeline-state.json 的 rework_count）---
+        // 口径：分子 = sum(rework_count.values()) === 0 的变更数；分母 = total_changes（上面刚累加，
+        // 与「变更闭环率」closed_loop/total_changes 完全同一集合，两行可直接对照）。
+        // 必须留在 specOwned 分支内 —— 用同一 --user 归属过滤，否则分母与闭环率不一致。
+        // 不用 quality_metrics.first_pass_rate 作数据源：实测 99 个变更中 62 个为 null（63%），
+        // 不可用；rework_count 则 99/99 全有值。
+        // ⚠️ 命名硬约束：日报里这个指标叫「变更一次通过率」，**不得**改叫「首次通过率」——
+        // 后者的名字在本项目已归属另一指标：rd-auto 的 first_pass_rate（按角色/派发一次过，
+        // 见 stats.js 的 avg_first_pass_rate / Grafana ai_dispatch_first_pass_rate），
+        // 且被 docs/ai-native-engineering-long-term-plan.md 列为 KPI。一处两名会互相污染。
+        //
+        // 缺 rework_count 的处理（取舍，勿改）：**不计入分子**（视为"非一次通过"）、**仍计入
+        // 分母**，另在扫描结束后写一条 stderr 提示。理由：宁可少算也不虚高；且分母与闭环率
+        // 保持同集合，两行能直接对照（若把这类变更踢出分母，两行分母就不一致了）。
+        const rawRework = state.rework_count;
+        if (rawRework && typeof rawRework === 'object' && !Array.isArray(rawRework)) {
+          let changeRework = 0;
+          for (const [role, times] of Object.entries(rawRework)) {
+            const n = Number(times);
+            if (!Number.isFinite(n) || n <= 0) continue; // 0 / 脏值不列进分布，也不计入总次数
+            changeRework += n;
+            const byRole = output.summary.spec_stats.rework_by_role;
+            byRole[role] = (byRole[role] || 0) + n;
+          }
+          output.summary.spec_stats.total_rework_count += changeRework;
+          if (changeRework === 0) output.summary.spec_stats.zero_rework_changes += 1;
+        } else {
+          specMissingReworkCount += 1;
+        }
       }
 
       // Collect matching dispatches from all phases
@@ -576,6 +670,26 @@ function main() {
     }
   }
 
+  // Issue #324: 归属过滤的一次性提示（沿用 collectConcernStats 的 warnedMissingAuthor
+  // 风格）。只写 stderr，不进日报 JSON：schema SpecStats 为 additionalProperties:false，
+  // 新增字段会被 render-report 的 schema 门禁拦下。提示的意义是避免"闭环率跳变但用户
+  // 不知道分母变小了"——与 !278「缺 author 明示未计入」同一考量。
+  if (specUser && specSkippedOtherCaller > 0) {
+    process.stderr.write(
+      `[collect-ai] spec_stats: ${specSkippedOtherCaller} change(s) excluded by --user="${specUser}" `
+      + '(caller 缺失或属于他人)；闭环率分母已按本人收口（issue #324）\n',
+    );
+  }
+
+  // 缺 rework_count 的一次性提示（同款 stderr 风格）。这类变更按保守口径算作"非一次通过"：
+  // 分子少算、分母照算 → 变更一次通过率偏低。提示的意义是避免"比率跳变但用户不知道为什么"。
+  if (specMissingReworkCount > 0) {
+    process.stderr.write(
+      `[collect-ai] spec_stats: ${specMissingReworkCount} change(s) missing rework_count `
+      + '(计为"非一次通过"：不计入分子、仍计入分母)；变更一次通过率按保守口径计算\n',
+    );
+  }
+
   // For wall clock: prefer quality_metrics total_wall_clock_ms when available across tasks
   // （主仓 + 子仓全部 tasks 汇总后计算，须在扫描循环外）
   let qualityWallClock = 0;
@@ -607,15 +721,24 @@ function main() {
   // --- ZCode model-io session token stats (Issue #277) ---
   collectZcodeSessionTokens(targetDate, output);
 
+  // --- CodeBuddy IDE 原生会话 token stats (Issue #307) ---
+  collectCodebuddySessionTokens(targetDate, output);
+
   // --- Finalize by_backend buckets（dominant model + null 语义）---
   finalizeByBackend(output.summary);
 
-  // Codex CLI 会带 reasoning_output_tokens，但 daily-report schema 的 Dispatch.TokenUsage
-  // 是 additionalProperties:false。聚合侧已消费该字段，仅在最终 JSON 输出前剥离。
+  // Issue #327 残留：dispatch.token_usage 里 {total} 单值形态（codex/zcode 显式 --tokens N
+  // 兜底透传）缺 daily-report schema 的 TokenUsage 必填字段，原样输出会让 render-report 的
+  // schema 门禁直接失败。同时 Codex CLI 的 reasoning_output_tokens 也不在 schema 声明内
+  // （Dispatch.TokenUsage 是 additionalProperties:false）。两者都在最终 JSON 输出前统一收口：
+  // 补齐口径与 collectUsageJsonl 的 usage.jsonl 虚拟任务一致（缺字段补 0、model 缺省 null），
+  // total/backend 原样保留（schema 已声明）。
+  // ⚠ 只在输出前改形状：by_backend 聚合与 finalizeByBackend 均已在此之前完成，
+  //   「缺字段 → null（不可用）」的桶语义没有被 0 覆盖。
   for (const task of output.tasks) {
     for (const dispatch of task.dispatches || []) {
       if (dispatch.token_usage && typeof dispatch.token_usage === 'object') {
-        delete dispatch.token_usage.reasoning_output_tokens;
+        dispatch.token_usage = conformDispatchTokenUsage(dispatch.token_usage);
       }
     }
   }
@@ -820,6 +943,10 @@ function slugToShortName(slug) {
 // Claude 的会话本就应计入，历史旧会话由 targetDate 日期过滤天然排除。
 // Issue #277: zcode 主会话数据在 ~/.zcode/cli/rollout（model-io 布局），由下方
 // collectZcodeSessionTokens 独立采集，不在本函数早退（融合语义同上）。
+// Issue #307: CodeBuddy IDE 主会话不写 ~/.codebuddy/projects（Claude 兼容布局），
+// 原生数据在 CodeBuddyExtension 扩展目录（statsSnapshot 布局），由下方
+// collectCodebuddySessionTokens 独立采集，本函数扫 ~/.codebuddy/projects 采不到
+// 属预期（IDE 版用户由独立采集补齐）。
 const SESSION_LAYOUT_BACKENDS = ['claude', 'codebuddy', 'qoder', 'codex', 'zcode'];
 
 // 从 projects 目录路径反推所属 backend（与 backendDataDir 前缀比对），
@@ -929,6 +1056,11 @@ function collectSessionTokens(targetDate, output) {
     let projectOutput = 0;
     let projectCacheRead = 0;
     let projectCacheCreation = 0;
+    // 按模型累加 token，bucket 落盘时取占比最高者作为该项目的 model 展示值。
+    // 此前本路径不写 model，日报「会话 Token 统计」表的 Claude 行恒显示 '—'
+    // （codex/zcode/codebuddy 三条路径都写了 model，唯独这条漏了）。
+    // 取"占比最高"而非 codex 路径的"最后一条 wins"：一个项目的多个会话可能用不同模型。
+    const projectModelTotals = {};
 
     for (const file of files) {
       const filePath = file.fullPath;
@@ -999,6 +1131,9 @@ function collectSessionTokens(targetDate, output) {
         output.summary.session_by_model[model].output_tokens += uOutput;
         output.summary.session_by_model[model].cache_read_tokens += uCacheRead;
         output.summary.session_by_model[model].cache_creation_tokens += uCacheCreation;
+
+        projectModelTotals[model] = (projectModelTotals[model] || 0)
+          + uInput + uOutput + uCacheRead + uCacheCreation;
       }
 
       if (sessionMatched) {
@@ -1013,7 +1148,7 @@ function collectSessionTokens(targetDate, output) {
 
     // Store per-project breakdown
     if (projectSessionCount > 0) {
-      output.summary.session_by_project[shortName] = {
+      const bucket = {
         slug: projectDir.name,
         count: projectSessionCount,
         input_tokens: projectInput,
@@ -1021,6 +1156,13 @@ function collectSessionTokens(targetDate, output) {
         cache_read_tokens: projectCacheRead,
         cache_creation_tokens: projectCacheCreation,
       };
+      // 占比最高的模型作为展示值（unknown 不参与竞争）；schema 的 bucket 已允许 model
+      // 字段（codex 路径 !242 起在写），无需改 schema。
+      const modelEntries = Object.entries(projectModelTotals)
+        .filter(([m]) => m && m !== 'unknown')
+        .sort((a, b) => b[1] - a[1]);
+      if (modelEntries.length > 0) bucket.model = modelEntries[0][0];
+      output.summary.session_by_project[shortName] = bucket;
     }
   }
   } // end for cand（多 backend 目录）
@@ -1266,11 +1408,20 @@ function collectCodexSessionTokens(targetDate, output) {
   }
 }
 
-// --- ZCode model-io record parsing (Issue #277) ---
+// --- ZCode model-io record parsing (Issue #277 / #290) ---
 // 解析单行 zcode model-io 记录（~/.zcode/cli/rollout/model-io-sess_*.jsonl，每行一次
-// 模型调用，camelCase schema）。字段映射：inputTokens→input_tokens、
-// cacheReadTokens→cache_read_input_tokens、cacheWriteTokens→cache_creation_input_tokens。
+// 模型调用，camelCase schema）。字段映射：cacheReadTokens→cache_read_input_tokens、
+// cacheWriteTokens→cache_creation_input_tokens；净 input 见下方 #290 口径注释。
 // request 字段含完整请求体（数百 KB/行），解析后只取 usage/model/时间戳。
+// Issue #290：camelCase response.usage.inputTokens 实测已含 cache 读（样例
+// inputTokens 37133 = snake input_tokens 9485 + cacheReadTokens 27648），直接映射为
+// 净 input 会让 render 的 input+output+cache_read 公式 cache 双计（当日总量虚高
+// ~1.6 倍）。净 input 来源优先级：
+//   ① response.providerMetadata.anthropic.usage（snake_case 原始 API 字段，
+//      input_tokens 不含 cache——issue 实测校准口径）
+//   ② camelCase usage 兜底：inputTokens 扣除 cacheReadTokens（实证只覆盖 cacheRead，
+//      cacheWrite 不扣），max(0) 钳制防负
+// total_tokens 保持 CLI 官报 usage.totalTokens（gross 口径，与 codex 官报 total 同语义）。
 // ⚠ keep-in-sync：与 .claude/skills/rd-auto/scripts/lib/cli-commands.js 的
 // parseZcodeModelIoRecord 保持同步（CJS/ESM 不共享 import，内联副本模式同 !259
 // RESOLVED_SYNONYMS）；tests/zcode-modelio.test.mjs 做漂移对账。
@@ -1285,13 +1436,31 @@ function parseZcodeModelIoRecord(line) {
   // 缺 completedAt 按起点时刻的点事件处理（时间窗重叠判定仍可用）
   const completedRaw = obj.completedAt != null ? Date.parse(obj.completedAt) : NaN;
   const completedMs = Number.isNaN(completedRaw) ? startedMs : completedRaw;
+  const num = (v) => (typeof v === 'number' ? v : 0);
+  const pmUsage = obj.response.providerMetadata
+    && obj.response.providerMetadata.anthropic
+    && obj.response.providerMetadata.anthropic.usage;
+  let inputTokens; let outputTokens; let cacheRead; let cacheWrite;
+  if (pmUsage && typeof pmUsage === 'object' && typeof pmUsage.input_tokens === 'number') {
+    // snake 原始 API 字段：input_tokens 本身不含 cache 读，直接采用
+    inputTokens = num(pmUsage.input_tokens);
+    outputTokens = num(pmUsage.output_tokens);
+    cacheRead = num(pmUsage.cache_read_input_tokens);
+    cacheWrite = num(pmUsage.cache_creation_input_tokens);
+  } else {
+    // camel 兜底：inputTokens 已含 cache 读，扣除 cacheReadTokens 得净 input
+    outputTokens = num(usage.outputTokens);
+    cacheRead = num(usage.cacheReadTokens);
+    cacheWrite = num(usage.cacheWriteTokens);
+    inputTokens = Math.max(0, num(usage.inputTokens) - cacheRead);
+  }
   return {
     started_at_ms: startedMs,
     completed_at_ms: completedMs,
-    input_tokens: typeof usage.inputTokens === 'number' ? usage.inputTokens : 0,
-    output_tokens: typeof usage.outputTokens === 'number' ? usage.outputTokens : 0,
-    cache_read_input_tokens: typeof usage.cacheReadTokens === 'number' ? usage.cacheReadTokens : 0,
-    cache_creation_input_tokens: typeof usage.cacheWriteTokens === 'number' ? usage.cacheWriteTokens : 0,
+    input_tokens: inputTokens,
+    output_tokens: outputTokens,
+    cache_read_input_tokens: cacheRead,
+    cache_creation_input_tokens: cacheWrite,
     total_tokens: typeof usage.totalTokens === 'number' ? usage.totalTokens : 0,
     model: (obj.model && typeof obj.model.modelId === 'string') ? obj.model.modelId : null,
     // 归因隔离信号：querySource 与 model.role 任一标记 subagent 即算
@@ -1399,6 +1568,189 @@ function collectZcodeSessionTokens(targetDate, output) {
     if (projectBucket.model) existing.model = projectBucket.model;
   } else {
     output.summary.session_by_project.zcode = projectBucket;
+  }
+}
+
+// --- Collect CodeBuddy IDE session tokens（genie 扩展 statsSnapshot 布局）---
+// Issue #307：CodeBuddy IDE 主会话不落 ~/.codebuddy/projects（Claude 兼容布局），
+// 日报 session_* 对 IDE 用户恒为 0。原生存储布局（Windows 实测）：
+//   %LOCALAPPDATA%\CodeBuddyExtension\Data\<userId>\CodeBuddyIDE\<workspaceId>\
+//   history\<workspaceId>\<sessionId>\messages\*.json
+// 每条 message 的 extra 字段是 JSON 字符串（需二次 parse），内含
+// statsSnapshot:{inputTokens, outputTokens, cachedInputTokens, cacheWriteTokens,
+// cacheMissTokens, thinkingTokens, elapsedMs, lastOutputTokens, credit}。
+// 口径（issue 实测）：
+//   - inputTokens 为 gross（含 cache 读），净 input = cacheMissTokens
+//   - 快照是 per-turn 非会话累计 → 各请求快照直接求和
+//   - 同一 requestId 可能落在多个 message 文件（请求/响应各一份）→ 全局去重后求和
+// 映射：input=cacheMissTokens / cache_read=cachedInputTokens /
+//       cache_creation=cacheWriteTokens / output=outputTokens；
+// statsSnapshot 无官方 total → total_tokens 记 0，渲染侧 sessionBucketTotal
+// 自动回落 input+output+cache_read 公式（与 Claude/zcode 展示口径一致）。
+// 聚合：顶层 session_* + session_by_project['codebuddy']（project 槽位统一，
+// 同 zcode 模式——messages 布局不含项目维度）+ session_by_model（按扩展 modelId）。
+function codebuddyIdeDataRoot() {
+  const expandHome = (p) => p.replace(/\$HOME/g, os.homedir());
+  if (process.env.CODEBUDDY_IDE_DATA_DIR) return expandHome(process.env.CODEBUDDY_IDE_DATA_DIR);
+  if (process.env.LOCALAPPDATA) {
+    return path.join(expandHome(process.env.LOCALAPPDATA), 'CodeBuddyExtension', 'Data');
+  }
+  // POSIX 兜底：Linux/macOS 下 VSCode 系扩展数据走 XDG 数据目录
+  const xdg = process.env.XDG_DATA_HOME
+    ? expandHome(process.env.XDG_DATA_HOME)
+    : path.join(os.homedir(), '.local', 'share');
+  return path.join(xdg, 'CodeBuddyExtension', 'Data');
+}
+
+// message 时间戳探测：createTime（issue 实测字段）优先，兼容 createdAt/timestamp/time；
+// 值可为 ISO 字符串或 epoch 毫秒数。全缺 → 回落文件 mtime（无法定位日期时不计入，
+// 宁可漏计不可错计——错误日期会把用量记到别的日子）。
+function codebuddyMessageTimeMs(msg, filePath) {
+  for (const key of ['createTime', 'createdAt', 'timestamp', 'time']) {
+    const v = msg[key];
+    if (typeof v === 'number' && v > 0) return v;
+    if (typeof v === 'string' && v.trim()) {
+      const ms = new Date(v).getTime();
+      if (!isNaN(ms)) return ms;
+    }
+  }
+  try {
+    return fs.statSync(filePath).mtimeMs;
+  } catch (_) {
+    return NaN;
+  }
+}
+
+function collectCodebuddySessionTokens(targetDate, output) {
+  const root = codebuddyIdeDataRoot();
+  const listDirs = (dir) => {
+    try {
+      return fs.readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name);
+    } catch (e) {
+      return [];
+    }
+  };
+  const listFiles = (dir) => {
+    try {
+      return fs.readdirSync(dir, { withFileTypes: true }).filter((d) => d.isFile() && d.name.endsWith('.json')).map((d) => d.name);
+    } catch (e) {
+      return [];
+    }
+  };
+
+  const projectBucket = {
+    slug: 'codebuddy',
+    count: 0, input_tokens: 0, output_tokens: 0,
+    cache_read_tokens: 0, cache_creation_tokens: 0,
+    model: null, total_tokens: 0, reasoning_tokens: 0,
+  };
+  const modelBuckets = output.summary.session_by_model;
+  // requestId 全局去重：跨 session/workspace 唯一，首个命中计一次
+  const seenRequestIds = new Set();
+  let sessionCount = 0;
+
+  for (const userId of listDirs(root)) {
+    const ideDir = path.join(root, userId, 'CodeBuddyIDE');
+    for (const wsId of listDirs(ideDir)) {
+      for (const histDir of listDirs(path.join(ideDir, wsId, 'history'))) {
+        for (const sessId of listDirs(path.join(ideDir, wsId, 'history', histDir))) {
+          const msgDir = path.join(ideDir, wsId, 'history', histDir, sessId, 'messages');
+          let sessionMatched = false;
+          for (const fileName of listFiles(msgDir)) {
+            const filePath = path.join(msgDir, fileName);
+            let msg;
+            try {
+              msg = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+            } catch (e) {
+              continue; // 坏行/非法 JSON：扩展中途崩溃落盘的残片，跳过
+            }
+            // extra 是 JSON 字符串（issue 实测形状），二次 parse；已解 object 也容错
+            let extra = null;
+            if (typeof msg.extra === 'string') {
+              try {
+                extra = JSON.parse(msg.extra);
+              } catch (e) {
+                continue;
+              }
+            } else if (msg.extra && typeof msg.extra === 'object') {
+              extra = msg.extra;
+            }
+            const snap = extra && extra.statsSnapshot;
+            if (!snap || typeof snap !== 'object') continue;
+            if (!isDateMatch(codebuddyMessageTimeMs(msg, filePath), targetDate)) continue;
+
+            // 去重：requestId 缺失时按 文件路径 兜底键（每文件天然只出现一次）
+            const dedupeKey = (typeof extra.requestId === 'string' && extra.requestId)
+              ? `req:${extra.requestId}`
+              : `file:${path.join(userId, wsId, histDir, sessId, fileName)}`;
+            if (seenRequestIds.has(dedupeKey)) continue;
+            seenRequestIds.add(dedupeKey);
+
+            const num = (v) => (typeof v === 'number' ? v : 0);
+            // 净 input：优先官方 cacheMissTokens；缺失时用 gross − cached 兜底还原
+            const netInput = num(snap.cacheMissTokens)
+              || Math.max(0, num(snap.inputTokens) - num(snap.cachedInputTokens));
+            const rec = {
+              input_tokens: netInput,
+              output_tokens: num(snap.outputTokens),
+              cache_read_input_tokens: num(snap.cachedInputTokens),
+              cache_creation_input_tokens: num(snap.cacheWriteTokens),
+              model: typeof extra.modelId === 'string' && extra.modelId ? extra.modelId : null,
+            };
+
+            sessionMatched = true;
+            projectBucket.input_tokens += rec.input_tokens;
+            projectBucket.output_tokens += rec.output_tokens;
+            projectBucket.cache_read_tokens += rec.cache_read_input_tokens;
+            projectBucket.cache_creation_tokens += rec.cache_creation_input_tokens;
+            if (rec.model) projectBucket.model = rec.model;
+
+            const mKey = rec.model || 'unknown';
+            if (!modelBuckets[mKey]) {
+              modelBuckets[mKey] = {
+                count: 0, input_tokens: 0, output_tokens: 0,
+                cache_read_tokens: 0, cache_creation_tokens: 0,
+                model: null, total_tokens: 0, reasoning_tokens: 0,
+              };
+            }
+            const mb = modelBuckets[mKey];
+            mb.count += 1;
+            mb.input_tokens += rec.input_tokens;
+            mb.output_tokens += rec.output_tokens;
+            mb.cache_read_tokens += rec.cache_read_input_tokens;
+            mb.cache_creation_tokens += rec.cache_creation_input_tokens;
+            if (rec.model) mb.model = rec.model;
+          }
+          // 一个 messages 目录 = 一个 IDE 会话（当日有命中快照才计数）
+          if (sessionMatched) {
+            sessionCount += 1;
+            projectBucket.count += 1;
+          }
+        }
+      }
+    }
+  }
+
+  if (sessionCount === 0) return;
+
+  output.summary.session_count += sessionCount;
+  output.summary.session_input_tokens += projectBucket.input_tokens;
+  output.summary.session_output_tokens += projectBucket.output_tokens;
+  output.summary.session_cache_read_input_tokens += projectBucket.cache_read_tokens;
+  output.summary.session_cache_creation_input_tokens += projectBucket.cache_creation_tokens;
+  // statsSnapshot 无官方 total（total_tokens 保持 0）：渲染侧 sessionBucketTotal
+  // 会回落 input+output+cache_read 公式，无需自行拼合
+
+  const existing = output.summary.session_by_project.codebuddy;
+  if (existing) {
+    existing.count += projectBucket.count;
+    existing.input_tokens += projectBucket.input_tokens;
+    existing.output_tokens += projectBucket.output_tokens;
+    existing.cache_read_tokens += projectBucket.cache_read_tokens;
+    existing.cache_creation_tokens += projectBucket.cache_creation_tokens;
+    if (projectBucket.model) existing.model = projectBucket.model;
+  } else {
+    output.summary.session_by_project.codebuddy = projectBucket;
   }
 }
 

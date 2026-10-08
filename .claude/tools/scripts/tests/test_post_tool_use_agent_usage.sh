@@ -8,8 +8,21 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 HOOK="${SCRIPT_DIR}/../../../hooks/shared/post-tool-use-agent-usage.sh"
 HELPER="${SCRIPT_DIR}/../../../hooks/shared/hook-json-helper.sh"
 ORCHESTRATOR="${SCRIPT_DIR}/../../../skills/rd-auto/scripts/orchestrator.js"
-USAGE_DIR="${SCRIPT_DIR}/../../../../.harness/usage"
+
+# ── 隔离真实数据（issue：本套件曾污染 ~/.claude/usage/usage.jsonl）──
+# hook 子进程的落盘目录由 HARNESS_USAGE_DIR / HARNESS_PROJECTS_DIR 决定（无则回退
+# $HOME/$HARNESS_ROOT/...）。本机环境常带 HARNESS_ROOT=.claude，不显式隔离时夹具会
+# 写进真实 usage.jsonl，被日报「AI 员工调度统计」当作 dispatch 吸入（表现为
+# debate/explore 等行 Dispatch 数虚高、token 全 null）。
+# 故整个套件统一指向临时目录；须置于任何 HARNESS_* 引用之前（set -u）。
+TEST_ISOLATED_DIR="$(mktemp -d "${TMPDIR:-/tmp}/hook-usage-test.XXXXXX")"
+export HARNESS_USAGE_DIR="${TEST_ISOLATED_DIR}/usage"
+export HARNESS_PROJECTS_DIR="${TEST_ISOLATED_DIR}/projects"
+trap 'rm -rf "${TEST_ISOLATED_DIR}"' EXIT
+
+USAGE_DIR="${HARNESS_USAGE_DIR}"
 USAGE_FILE="${USAGE_DIR}/usage.jsonl"
+mkdir -p "${USAGE_DIR}"
 
 PASS=0
 FAIL=0
@@ -42,6 +55,15 @@ run_test() {
     fi
 
     # Run hook
+    # 为该 session 造最小 stub transcript（隔离目录内）：真实环境 transcript 总是存在，
+    # stub 让 hook 走完整链路（解析 transcript → 提取 token → 写记录）而不是提前退出。
+    local _sid
+    _sid="$(printf '%s' "$input_json" | sed -n 's/.*"session_id":"\([^"]*\)".*/\1/p')"
+    if [ -n "$_sid" ]; then
+        mkdir -p "${HARNESS_PROJECTS_DIR}/stub-project"
+        printf '{"type":"assistant","message":{"id":"msg-%s","model":"test-model","usage":{"input_tokens":10,"output_tokens":5,"cache_read_input_tokens":2,"cache_creation_input_tokens":1}}}\n' "$_sid" \
+            > "${HARNESS_PROJECTS_DIR}/stub-project/${_sid}.jsonl"
+    fi
     echo "${input_json}" | CLAUDE_PROJECT_DIR="$(cd "${SCRIPT_DIR}/../../../.." && pwd)" \
         bash "${HOOK}" 2>/dev/null || true
 
@@ -340,21 +362,17 @@ run_test "Task tool name also triggers recording" \
 echo ""
 echo "--- Watermark per-session isolation ---"
 
-USAGE_DIR_TEST="${HOME}/.claude/usage"
+# 与套件其余用例同用隔离目录（见文件头部）——本段曾硬编码 $HOME/.claude/usage，
+# 是真实 usage.jsonl 被夹具污染的来源之一。
+USAGE_DIR_TEST="${HARNESS_USAGE_DIR}"
 # project_slug 由 CLAUDE_PROJECT_DIR 经 sed 编码得到，run_test 设的是项目根目录
 _PROJECT_SLUG_TEST="$(echo "$(cd "${SCRIPT_DIR}/../../../.." && pwd)" | sed 's/[^a-zA-Z0-9]/-/g')"
-_PROJECTS_DIR_TEST="${HOME}/.claude/projects/${_PROJECT_SLUG_TEST}"
+_PROJECTS_DIR_TEST="${HARNESS_PROJECTS_DIR}"
 
 # Cleanup from previous runs
 rm -f "${USAGE_DIR_TEST}/.last-line-"*"-test-watermark-"* 2>/dev/null || true
-
-# Stub minimal transcript files so hook can resolve _transcript_path
-mkdir -p "${_PROJECTS_DIR_TEST}"
-echo '{"line":1}' > "${_PROJECTS_DIR_TEST}/test-watermark-A.jsonl"
-echo '{"line":1}' > "${_PROJECTS_DIR_TEST}/test-watermark-B.jsonl"
-
-# Cleanup hook stub transcripts on exit
-trap 'rm -f "${_PROJECTS_DIR_TEST}/test-watermark-A.jsonl" "${_PROJECTS_DIR_TEST}/test-watermark-B.jsonl"' EXIT
+# （stub transcript 由 run_test 统一创建于 ${HARNESS_PROJECTS_DIR}/stub-project/，
+#   本段不再自行放根目录 stub——hook 只搜一级子目录，根级文件根本不可达。）
 
 check_watermark_per_session() {
     local _result="$1"

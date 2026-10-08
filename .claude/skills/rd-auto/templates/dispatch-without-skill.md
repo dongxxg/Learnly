@@ -64,4 +64,8 @@ JSON 必须以 ```json fenced code block 形式出现在输出末尾，例如：
 3. **禁止**进入 Plan Mode
 4. **禁止**使用 AskUserQuestion 或等待用户确认 — 管道中无人能回答交互式问题
 5. 上下文不足时返回 exit_status=NEEDS_CONTEXT
+6. **禁止嵌套派发**：不得用 Agent/Task 工具（或任何 backend 的 headless dispatch）派发其他角色
+   （Tester / Reviewer / Architect / Developer / Debate），也不得在结果中给出其他角色的结论或
+   自评分——阶段推进由主会话按 DAG 派发，嵌套派发没有 `dispatch_history` 记录、不参与制品门禁 /
+   P0 否决 / 评分路由；需其他角色介入请返回 exit_status=NEEDS_PM
 </rules>

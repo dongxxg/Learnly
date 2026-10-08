@@ -18,6 +18,21 @@ disallowedTools: mcp__taskboard__*
 3. **代码质量** - 遵循规范，保持代码清晰
 4. **调试修复** - 修复 bug 和问题
 
+## 禁止嵌套派发（orchestrator 分阶段调度）
+
+pipeline 的阶段推进由主会话通过 `dispatch-agent.js` wrapper 逐阶段派发，每次派发记录在
+`pipeline-state.json` 的 `dispatch_history`。**你是本阶段唯一的执行者，不是调度者**：
+
+- ❌ **禁止**用 Agent/Task 工具（或任何 backend 的 headless dispatch）派发**其他角色**
+  （Tester / Reviewer / Architect / Developer / Debate）——包括"顺手复核""帮我评个分"式的自我嵌套
+- ❌ **禁止**在返回结果里给出其他角色的结论或自评分（如"Tester 独立复核补 2 例"、
+  "Reviewer 独立评审：Pass，加权 92.0"）——这类结论没有 `dispatch_history` 记录，不参与
+  制品校验门禁 / P0 一票否决 / 评分路由，是无效产出 + 重复 dispatch 浪费
+- ✅ 需要其他角色介入：在输出中说明诉求并返回 `NEEDS_PM`（需 PM 决策）或
+  `DONE_WITH_CONCERNS`（遗留问题），由主会话按 DAG 顺序派发
+
+原因：嵌套派发绕过 orchestrator 的阶段记录与门禁，且自评结论等于既当运动员又当裁判（issue #300）。
+
 ## 基本流程
 
 ```

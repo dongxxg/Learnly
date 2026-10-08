@@ -546,8 +546,14 @@ echo "--- Group 6: C009 - claude path catch exit_status ---"
 
 # Test 22: source code has exit_status: 'BLOCKED' in claude catch block (C009)
 echo "Test 22: fanout-dispatch-agent.js claude catch has exit_status (C009)"
-# Check that the claude path catch block (prompt: null) includes exit_status
-CLAUDE_CATCH_OK=$(awk '/backendType === .claude./,/^  \/\/ ─── Codex/' "$FANOUT_AGENT" | grep -c "exit_status.*BLOCKED" || true)
+# Check that the claude path catch block (prompt: null) includes exit_status.
+# !322 重构后 claude 分支不再写作 `backendType === 'claude'`，而是并入
+# `isNativeAgentToolBackend`（claude/codebuddy/zcode 同一条原生 Agent 工具路径；
+# dsh 曾在此列，后按"不做 dsh dispatch"移除，见 dispatch-agent.js 同名数组注释），
+# 区间终点也由 `─── Codex` 改为 `─── Headless backend`。锚点须随结构更新，
+# 否则 awk 取到空区间、grep -c 恒为 0 —— 断言会以"缺 exit_status"的形式假报缺陷。
+# 只匹配代码行（`^ *exit_status:`），避免把上方解释该行为的注释也算作命中。
+CLAUDE_CATCH_OK=$(awk '/isNativeAgentToolBackend/,/─── Headless backend/' "$FANOUT_AGENT" | grep -cE "^ *exit_status: 'BLOCKED'" || true)
 if [ "$CLAUDE_CATCH_OK" -gt 0 ]; then
     echo "  [PASS] claude catch block has exit_status: BLOCKED"
     PASS=$((PASS + 1))

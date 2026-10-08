@@ -1,9 +1,39 @@
 // lib/copy-assets.mjs — 把 .claude/ 下的框架目录完整复制到目标 agent 目录。
 // 设计约束（install.sh --type）：目标 agent 目录必须是自包含的【真实副本】，不存在指向 .claude/ 的软链接。
-// 单事实源仍是 .claude/；每次 generator 运行覆盖同步（rmSync + cpSync / copyDirExcept）。
+// 框架技能按 manifest 逐项更新，保留 rd init / 项目技能；支持目录仍整目录同步。
 import { join, sep as SEP } from 'node:path';
 import { existsSync, readdirSync, statSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
-import { copyDir, copyDirExcept, listDirs, REPO_ROOT } from './common.mjs';
+import { copyDir, copyDirExcept, copyFile, listDirs, REPO_ROOT } from './common.mjs';
+
+// rd init 在目标 backend 生成技能，不能用 .claude/skills 整目录替换它们。
+// 只有 manifest 管理的框架条目允许覆盖；其余源技能仅补缺失，避免旧的
+// .claude/skills/rd-* 副本覆盖目标刚生成的 RD 技能。返回本轮复制项以限定路径重写。
+function copySkills(rootDir) {
+  const src = join(REPO_ROOT, '.claude', 'skills');
+  const dst = join(REPO_ROOT, rootDir, 'skills');
+  const copied = new Set();
+  if (!existsSync(src)) return copied;
+
+  const manifest = join(REPO_ROOT, '.framework-manifest');
+  const entries = existsSync(manifest)
+    ? readFileSync(manifest, 'utf8').split(/\r?\n/)
+      .map((line) => line.match(/^([df]) (.+?)\s*$/)).filter(Boolean)
+    : [];
+  mkdirSync(dst, { recursive: true });
+  for (const name of readdirSync(src)) {
+    if (name === '__pycache__') continue;
+    const skillPath = `.claude/skills/${name}`;
+    const managed = entries.some(([, type, path]) => skillPath === path
+      || (type === 'd' && skillPath.startsWith(`${path}/`)));
+    const from = join(src, name);
+    const to = join(dst, name);
+    if (existsSync(to) && !managed) continue;
+    if (statSync(from).isDirectory()) copyDir(from, to);
+    else copyFile(from, to);
+    copied.add(name);
+  }
+  return copied;
+}
 
 function countEntries(p) {
   if (!existsSync(p)) return 0;
@@ -189,12 +219,14 @@ function injectHarnessRootDefault(text, harnessRoot) {
  * @param {string} rootDir      目标 agent 根目录（如 ".codex"）
  * @param {string} [harnessRoot]  backend 的 HARNESS_ROOT 值（如 '.codex'），用于
  *                                'entry' 模式注入；不传则跳过入口注入。
+ * @param {Set<string>|null} [copiedSkills] 仅重写本轮复制的技能；保留原生/项目技能原文。
  */
-export function rewriteClaudePaths(rootDir, harnessRoot = null) {
+export function rewriteClaudePaths(rootDir, harnessRoot = null, copiedSkills = null) {
   const root = join(REPO_ROOT, rootDir);
   if (!existsSync(root)) return;
   const walk = (d) => {
     for (const name of readdirSync(d)) {
+      if (d === join(root, 'skills') && copiedSkills && !copiedSkills.has(name)) continue;
       const p = join(d, name);
       if (statSync(p).isDirectory()) {
         walk(p);
@@ -287,12 +319,11 @@ export function copySupportDirs(rootDir, { rulesMd = true } = {}) {
  * @returns {{skills: number, agents: number, support?: object}}
  */
 export function copyAssets(rootDir, { skills = true, agents = true, support = true, rulesMd = true, harnessRoot = null } = {}) {
-  const srcSkills = join(REPO_ROOT, '.claude', 'skills');
   const srcAgents = join(REPO_ROOT, '.claude', 'agents');
   const dstSkills = join(REPO_ROOT, rootDir, 'skills');
   const dstAgents = join(REPO_ROOT, rootDir, 'agents');
 
-  if (skills) copyDir(srcSkills, dstSkills);
+  const copiedSkills = skills ? copySkills(rootDir) : new Set();
   if (agents) copyDir(srcAgents, dstAgents);
   const supportCounts = support ? copySupportDirs(rootDir, { rulesMd }) : undefined;
 
@@ -303,7 +334,7 @@ export function copyAssets(rootDir, { skills = true, agents = true, support = tr
   //
   // harnessRoot：入口脚本（tools/scripts/setup/*）注入默认值的 backend 标识，
   // 来自 targets.json 的 env.HARNESS_ROOT；adapter 应传入（.claude 源仓库不传）。
-  rewriteClaudePaths(rootDir, harnessRoot);
+  rewriteClaudePaths(rootDir, harnessRoot, copiedSkills);
 
   return {
     skills: listDirs(dstSkills).length,

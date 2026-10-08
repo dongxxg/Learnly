@@ -7,7 +7,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/hook-json-helper.sh"
 
-INPUT=$(cat)
+# issue !308：带超时读 stdin；超时/读失败 fail-open（放行好过阻塞工具调用 60s）
+INPUT=$(hook_read_stdin) || {
+    echo "[state-check] stdin 读取超时/失败，fail-open 放行（issue !308）" >&2
+    exit 0
+}
 COMMAND=$(_jq_raw "$INPUT" command)
 
 # 只拦截 git commit

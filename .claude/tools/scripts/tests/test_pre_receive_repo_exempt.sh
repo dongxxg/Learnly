@@ -18,6 +18,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 HOOK="${SCRIPT_DIR}/../../../hooks/git/pre-receive"
 PASS=0
 FAIL=0
+ZERO="0000000000000000000000000000000000000000"
 
 [ -f "${HOOK}" ] || { echo "SKIP: pre-receive hook not found at ${HOOK}"; exit 1; }
 
@@ -52,6 +53,10 @@ mkcommit() {
         git checkout -q -b badbr "${parent}"
         git commit --allow-empty --quiet -m "$msg"
         echo "${parent} $(git rev-parse HEAD)" > "${dir}/.pair"
+        # 回到服务端时点：只保留基线 ref main，删掉构造用分支（否则 hook 的
+        # `rev-list $newrev --not --all` 窗口为空，校验被整体跳过 → 假绿，见 issue !303）
+        git checkout -q -B main "${parent}"
+        git branch -D tmp mergebase badbr >/dev/null 2>&1
     )
 }
 
@@ -77,6 +82,10 @@ run() {
     local name="$1" expected="$2" assert="$3"
     local oldrev="$4" newrev="$5" refname="$6" repo_dir="$7"
     shift 7
+    # 还原服务端时点：被推 ref 仍指向 oldrev（pre-receive 执行时 refs 尚未更新）
+    if [ "${oldrev}" != "${ZERO}" ]; then
+        git -C "${repo_dir}" update-ref "${refname}" "${oldrev}" 2>/dev/null || true
+    fi
     local actual=0 out
     out=$(cd "${repo_dir}" && printf '%s %s %s\n' "$oldrev" "$newrev" "$refname" \
           | env "$@" bash "${HOOK}" 2>&1) || actual=$?

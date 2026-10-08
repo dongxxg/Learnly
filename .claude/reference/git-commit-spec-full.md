@@ -144,6 +144,10 @@
 
 ≤ 72 字符，动宾结构中文摘要（如"新增xx功能"/"修复xx问题"/"重构xx模块"/"移除xx代码"），不以句号结尾。禁止模糊词（`修改`、`优化`、`update code`）。禁止用模块名代替 type（如 `git-guard: 修复xxx` ❌，应写 `fix: 修复xxx`）。
 
+### 总长限制（强制）
+
+message 全文 ≤ 500 字符。本地 commit-msg（规则 4）与服务端 pre-receive（规则 4）双重校验，超限直接拒绝。被拒时精简正文，保留首行 + body 首行 + 关键变更点。
+
 ## Commit 粒度规范
 
 **原则**：一个 commit 一个原子逻辑变更（atomic commit）。能独立通过测试、独立 revert、独立 review。

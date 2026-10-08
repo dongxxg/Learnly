@@ -19,7 +19,9 @@ node_modules/
 .stylelintcache
 *.tsbuildinfo
 .nyc_output/
-coverage/
+# 覆盖率产物目录根锚定（Issue !317）：未锚定的 coverage/ 会吞掉任意深度同名业务目录
+# （如 apps/coverage），其下代码对 git 静默不可见，且父目录被排除后无法用 ! 重新包含
+/coverage/
 
 # Python
 __pycache__/
@@ -77,3 +79,7 @@ outputs/
 .harness/.worktrees/
 # daily-report 多仓库采集配置（collect-all.js 生成，含本机绝对路径，机器本地）
 .harness-projects
+
+# 框架入口脚本（setup 下发到业务仓根目录的安装产物，业务仓不提交）
+# 根锚定：只匹配仓库根的入口脚本，避免误伤业务仓内任意层级同名目录
+/harness

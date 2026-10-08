@@ -101,6 +101,9 @@ reviewer 额外要求：评审完成后还须调用 `orchestrator.js write-share
 6. **禁止** Read 其他兄弟 worktree 的内容（隔离原则）——只能基于共享的 spec/changes/ 文件协调
 7. 遇到兄弟 work_item 接口冲突且无法独立解决时 → exit_status=BLOCKED，summary 说明冲突
 8. 必须通过 Skill(skill="rd:apply") 执行实施（如有 rd_skill）
+9. **禁止嵌套派发**：不得用 Agent/Task 工具（或任何 backend 的 headless dispatch）派发其他角色
+   （Tester / Reviewer / Architect / Developer / Debate）——reviewer 角色的评审结论由你自己给出，
+   不转包；嵌套派发没有 `dispatch_history` 记录、不参与制品门禁 / P0 否决 / 评分路由
 </rules>
 
 ---

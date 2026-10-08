@@ -77,9 +77,14 @@ before_script:
   - |
     if [ ! -f .claude/tools/scripts/ci-detect-changes.sh ]; then
       echo "[harness] Fetching Uni-AURI scripts..."
-      git clone --depth 1 --single-branch --branch main \\
+      # Issue !310：不丢弃 clone 的 stderr——clone 失败必须显式报错并 exit 1，
+      # 否则 pipeline 以无信息方式失败（日志只见 Fetching 后静默），排障困难
+      if ! git clone --depth 1 --single-branch --branch main \\
         "http://gitlab-ci-token:${{CI_JOB_TOKEN}}@${{CI_SERVER_HOST}}/public_group/rd_harness.git" \\
-        /tmp/rd_harness 2>/dev/null && \\
+        /tmp/rd_harness; then
+        echo "[harness] ERROR: clone rd_harness failed（检查 CI_JOB_TOKEN 权限与网络）"
+        exit 1
+      fi
       mkdir -p .claude/tools/ && \\
       cp -r /tmp/rd_harness/.claude/tools/scripts .claude/tools/ && \\
       rm -rf /tmp/rd_harness && \\

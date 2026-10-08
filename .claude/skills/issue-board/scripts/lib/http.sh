@@ -31,15 +31,25 @@ _http_request() {
   local -a args=("${CURL_OPTS[@]}" -X "${method}"
                  --header "PRIVATE-TOKEN: ${TOKEN}"
                  -D "${_HTTP_HEADERS_FILE}")
+  # 实测（!261 同类问题的写路径变体）：Git-Bash 向原生 curl.exe 传 argv 时按
+  # ANSI(GBK) 代码页转码，UTF-8 中文 payload 被损坏 → 服务端 400 Bad Request。
+  # bash→env→python 往返与 stdin 管道均无损，唯 argv 层损坏，故 payload 一律
+  # 经临时文件 + --data-binary 传递，禁止 --data "${data}" 回退。
+  local payload_file=""
   if [ -n "${data}" ]; then
-    args+=(--header "Content-Type: application/json" --data "${data}")
+    args+=(--header "Content-Type: application/json")
+    payload_file=$(mktemp 2>/dev/null || mktemp -t gitlabissue_payload)
+    printf '%s' "${data}" > "${payload_file}"
+    args+=(--data-binary "@${payload_file}")
   fi
 
   local body
   if ! body=$(curl "${args[@]}" "${url}"); then
+    [ -n "${payload_file}" ] && rm -f "${payload_file}"
     echo "[gitlab-issue] Error: curl failed for ${method} ${url}" >&2
     return 1
   fi
+  [ -n "${payload_file}" ] && rm -f "${payload_file}"
 
   _http_check_error "${body}" "${_HTTP_HEADERS_FILE}" "${method}" "${endpoint}" || return 1
   printf '%s' "${body}"
@@ -96,23 +106,32 @@ http_get() {
 # parameter is injected per call. Results are merged with python3 into one JSON array.
 http_get_all() {
   local endpoint="$1"
-  local page=1 all="[]" pages_seen=0
+  local page=1 pages_seen=0
+  # 每页 minify 成单行后累积到 bash 变量，末页一次性合并。中途不经 env/argv，
+  # 也不落临时文件——单个 env/argv 字符串上限 MAX_ARG_STRLEN=128KiB，全量
+  # issue JSON 轻易超限 → execve 失败（"Argument list too long"），python
+  # 收到空串后报 JSONDecodeError。实测 48 项 issue 即触发。
+  # 不落盘是刻意的：POSIX 临时路径经 env 传给原生 Windows python 时 MSYS2
+  # 不做路径转换（仓库内其它脚本用 cygpath -m 绕开，见 tools/scripts/
+  # maintenance/doctor.sh），会静默读不到文件而丢页。
+  local pages=""
   while :; do
     pages_seen=$((pages_seen+1))
     if [ "${pages_seen}" -gt "${_HTTP_MAX_PAGES}" ]; then
       echo "[gitlab-issue] Error: pagination exceeded ${_HTTP_MAX_PAGES} pages at ${endpoint}" >&2
       return 1
     fi
-    local ep sub next
+    local ep sub line next
     if [[ "${endpoint}" == *"?"* ]]; then
       ep="${endpoint}&page=${page}"
     else
       ep="${endpoint}?page=${page}"
     fi
     sub=$(_http_request GET "${ep}") || return 1
-    # Merge accumulator with this page (both are arrays).
-    all=$(ALL="${all}" SUB="${sub}" python3 -c '
-import sys, json, os
+    # 本页 → 单行 JSON 数组。json.dumps 输出不含字面换行，故可按行累积、
+    # 末页 splitlines 还原（即便服务端返回的是美化格式也不受影响）。
+    line=$(printf '%s' "${sub}" | python3 -c '
+import sys, json
 # !261: GBK 终端 stdin/stdout 都重配置 utf-8——stdin 按 utf-8 解 JSON，stdout 打印中文标题（ensure_ascii=False）
 for _s in ("stdin", "stdout"):
     _st = getattr(sys, _s, None)
@@ -120,12 +139,11 @@ for _s in ("stdin", "stdout"):
     if _r is not None:
         try: _r(encoding="utf-8", errors="replace")
         except Exception: pass
-a = json.loads(os.environ["ALL"]) if os.environ.get("ALL") else []
-s = json.loads(os.environ["SUB"]) if os.environ.get("SUB") else []
-if not isinstance(a, list): a = []
-if not isinstance(s, list): s = []
-print(json.dumps(a + s, ensure_ascii=False))
+d = json.load(sys.stdin)
+if not isinstance(d, list): d = []
+print(json.dumps(d, ensure_ascii=False))
 ')
+    pages+="${line}"$'\n'
     # Read X-Next-Page header from the scratch file populated by _http_request.
     next=""
     if [ -f "${_HTTP_HEADERS_FILE}" ]; then
@@ -135,7 +153,24 @@ print(json.dumps(a + s, ensure_ascii=False))
     [ "${next}" = "${page}" ] && break  # safety: page didn't advance
     page="${next}"
   done
-  printf '%s' "${all}"
+  # 合并全部页为单个 JSON 数组（空输入 → []，与单页空结果一致）。
+  printf '%s' "${pages}" | python3 -c '
+import sys, json
+# !261: stdout 重配置 utf-8（ensure_ascii=False 打印中文不崩）
+_r = getattr(sys.stdout, "reconfigure", None)
+if _r is not None:
+    try: _r(encoding="utf-8", errors="replace")
+    except Exception: pass
+out = []
+for raw in sys.stdin.read().splitlines():
+    raw = raw.strip()
+    if not raw:
+        continue
+    d = json.loads(raw)
+    if isinstance(d, list):
+        out.extend(d)
+print(json.dumps(out, ensure_ascii=False))
+'
 }
 
 # http_put ENDPOINT DATA

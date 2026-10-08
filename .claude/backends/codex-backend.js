@@ -788,7 +788,15 @@ export class CodexBackend {
    * 记录使用情况
    */
   async recordUsage(record) {
-    const usageDir = join(homedir(), '.claude', 'usage');
+    // usage 目录：HARNESS_USAGE_DIR 优先，缺省回退真实目录（生产采集路径不变）。
+    // ⚠️ 勿改回硬编码 homedir()——本方法是 backend 侧唯一真实落盘点，硬编码会让
+    // 测试（如 test_codex_fanout_parallel）一旦触发 recordUsage 就把夹具写进真实
+    // usage.jsonl，被日报当真实 dispatch 吸入（同类污染：hook 测试套件，已修）。
+    // 值可含字面 $HOME（generator 注入惯例），解析规则与 post-tool-use-agent-usage.sh 一致。
+    const home = homedir();
+    const usageDir = process.env.HARNESS_USAGE_DIR
+      ? process.env.HARNESS_USAGE_DIR.replace(/^\$HOME/, () => home).replace(/^~\//, () => `${home}/`)
+      : join(home, '.claude', 'usage');
     if (!existsSync(usageDir)) {
       mkdirSync(usageDir, { recursive: true });
     }

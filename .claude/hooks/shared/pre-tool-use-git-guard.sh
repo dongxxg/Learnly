@@ -8,7 +8,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/hook-json-helper.sh"
 
-INPUT=$(cat)
+# issue !308：带超时读 stdin；超时/读失败 fail-open（放行好过阻塞工具调用 60s）
+INPUT=$(hook_read_stdin) || {
+    echo "[git-guard] stdin 读取超时/失败，fail-open 放行（issue !308）" >&2
+    exit 0
+}
 TOOL=$(_jq_val "$INPUT" tool_name)
 
 case "$TOOL" in
@@ -174,6 +178,136 @@ PM 审批方式：回复 AI「批准 ${_C_NONCE}」，AI 写入 token 后重新�
 分支名：${_BRANCH_NAME}  挑战码：${_BC_NONCE}
 PM 审批方式：回复 AI「批准 ${_BC_NONCE}」，AI 写入 token 后重新执行建分支命令。
 （AI 写入方式：echo ${_BC_NONCE} > .harness/.branch-approved）"
+        exit 0
+    fi
+fi
+
+# ── 5) push 审批兜底：会话级 Challenge-Response ──
+# 仓级 pre-push hook 是 push 审批的主门禁，但它只对【已安装 hooks 的仓】生效：
+# 新 clone 未跑 setup、或 AI 在任意外部仓 push 时，审批形同不存在（issue !294 / !297）。
+# 双层设计（避免双重审批）：
+#   目标仓已装可执行 pre-push → 由其接管，本 guard 放行；
+#   未装 → 本 guard 兜底同等强度的会话级挑战码审批，状态机与 4.3 分支审批同构。
+# CI 环境通过 CLAUDE_PUSH_AUTO_APPROVE=1 自动放行（与 pre-push 同名开关）。
+if [ "${CLAUDE_PUSH_AUTO_APPROVE:-}" != "1" ]; then
+    # 匹配 git push；允许 -C <dir> / -c <k=v> 前置参数（-c 可改 core.hooksPath 绕过
+    # 仓级 hook，漏判即门禁失效）。前缀须位于命令起始或 ; & | ( 分隔符之后，
+    # 避免命中引号内的「git push」文本。
+    _PUSH_RE='(^|[;&|(][[:space:]]*)git([[:space:]]+-[cC][[:space:]]+[^;&|]+)*[[:space:]]+push([[:space:]]|$)'
+    if printf '%s' "$COMMAND" | grep -qE "$_PUSH_RE"; then
+        # 5.1 目标仓解析：git -C <dir> push → dir；cd <dir> (&&|;) git push → dir；
+        # 都没有则回落会话根 CLAUDE_PROJECT_DIR（AI 通常在会话根执行 push）。
+        # 解析结果不是目录时同样回落会话根（fail-safe，不因路径解析偏差误判）。
+        _PG_DIR=""
+        # 前置补一个空格：命令可能以 git/cd 开头，sed 里用 [[:space:]] 定界才能命中
+        if printf ' %s' "$COMMAND" | grep -qE '[[:space:]]git[[:space:]]+-C[[:space:]]+'; then
+            _PG_DIR=$(printf ' %s' "$COMMAND" | sed -nE 's/.*[[:space:]]git[[:space:]]+-C[[:space:]]+([^[:space:];&|]+).*/\1/p' | head -1)
+        fi
+        if [ -z "$_PG_DIR" ]; then
+            _PG_DIR=$(printf ' %s' "$COMMAND" | sed -nE 's/.*[[:space:]]cd[[:space:]]+([^[:space:];&|]+).*/\1/p' | head -1)
+        fi
+        # 去首尾引号（cd "dir" && git push）
+        _PG_DIR="${_PG_DIR#\"}"; _PG_DIR="${_PG_DIR%\"}"
+        _PG_DIR="${_PG_DIR#\'}"; _PG_DIR="${_PG_DIR%\'}"
+        if [ -z "$_PG_DIR" ] || [ ! -d "$_PG_DIR" ]; then
+            _PG_DIR="${CLAUDE_PROJECT_DIR:-.}"
+        fi
+
+        # 5.2 双重审批判定：目标仓已装可执行 pre-push → 仓级门禁接管，本兜底不介入
+        # （否则被管理仓会同时要求仓级挑战码与会话级挑战码）。
+        _PG_HOOKS=$(git -C "$_PG_DIR" rev-parse --git-path hooks 2>/dev/null || true)
+        case "$_PG_HOOKS" in
+            /*) ;;                                    # 绝对路径（worktree/子模块常见）
+            "") ;;                                    # 非 git 仓 → 无仓级 hook
+            *) _PG_HOOKS="${_PG_DIR}/${_PG_HOOKS}" ;; # 相对路径：-C 后 cwd 即目标仓
+        esac
+        if [ -n "$_PG_HOOKS" ] && [ -x "${_PG_HOOKS}/pre-push" ]; then
+            exit 0
+        fi
+
+        # 5.3 未装 hook → 会话级挑战码审批
+        # 状态文件写在【目标仓】.harness/，文件名与内容格式（NONCE:HEAD:TIMESTAMP）
+        # 与仓级 pre-push 一致，故 PM 的审批指令「回复 AI 批准 <nonce>」两层通用；
+        # 挑战码绑定目标仓 HEAD，推送内容变化即失效。
+        _PG_CHALLENGE="${_PG_DIR}/.harness/.push-challenge"
+        _PG_TOKEN="${_PG_DIR}/.harness/.push-approved"
+        # 挑战码有效期（秒）；single_use，审批通过即清理。
+        # 改此值须同步：权威源 harness-rules.yaml push_approval.security.ttl_seconds
+        # + pre-push 的 PUSH_TTL_SECONDS + 下方过期提示文案的分钟数。
+        _PG_TTL=300
+        _PG_HASH=$(git -C "$_PG_DIR" rev-parse --short HEAD 2>/dev/null || echo "unknown")
+        _PG_SUBJECT=$(git -C "$_PG_DIR" log -1 --format="%s" 2>/dev/null || echo "unknown")
+
+        _pg_mtime() {
+            stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null || echo 0
+        }
+        _pg_expired() {
+            local _age=$(( $(date +%s) - $(_pg_mtime "$1") ))
+            [ "$_age" -gt "$_PG_TTL" ]
+        }
+        # 输出审批提示并拦截（$1=提示语 $2=挑战码）
+        _pg_deny() {
+            hook_deny "$1
+目标仓：${_PG_DIR}
+待推提交：${_PG_SUBJECT}
+HEAD: ${_PG_HASH}  挑战码：$2
+PM 审批方式（二选一）：
+1. 手动: echo $2 > ${_PG_DIR}/.harness/.push-approved 后重新 git push
+2. 自动: 回复 AI「批准推送」，AI 写入 token 后重推
+⚠️ push 完成前不得创建新 commit（否则挑战码失效）。
+（目标仓安装 pre-push hook 后，push 审批由仓级门禁接管，本兜底不再介入）"
+        }
+
+        if [ -f "$_PG_CHALLENGE" ] && [ -f "$_PG_TOKEN" ]; then
+            _PG_C_CONTENT=$(cat "$_PG_CHALLENGE" 2>/dev/null || true)
+            _PG_T_CONTENT=$(cat "$_PG_TOKEN" 2>/dev/null || true)
+            _PG_C_NONCE=$(printf '%s' "$_PG_C_CONTENT" | cut -d: -f1)
+            _PG_C_HASH=$(printf '%s' "$_PG_C_CONTENT" | cut -d: -f2)
+            if _pg_expired "$_PG_CHALLENGE"; then
+                rm -f "$_PG_CHALLENGE" "$_PG_TOKEN"
+                hook_deny "push 审批挑战码已过期（>5分钟），已清除。请重新执行 git push 触发新挑战码，PM 批准后再推。"
+                exit 0
+            fi
+            if [ "$_PG_T_CONTENT" = "$_PG_C_NONCE" ] && [ "$_PG_C_HASH" = "$_PG_HASH" ]; then
+                # 审批通过：清理状态文件，放行
+                rm -f "$_PG_CHALLENGE" "$_PG_TOKEN"
+                exit 0
+            fi
+            # 令牌不匹配，或 HEAD 已变更（挑战码绑定失效）→ 删令牌重来
+            rm -f "$_PG_TOKEN"
+            _pg_deny "push 令牌无效（与挑战码不匹配，或 HEAD 已变更导致挑战码失效），已删除令牌。" "$_PG_C_NONCE"
+            exit 0
+        fi
+
+        if [ -f "$_PG_TOKEN" ] && [ ! -f "$_PG_CHALLENGE" ]; then
+            rm -f "$_PG_TOKEN"
+            hook_deny "push 挑战码已失效（无对应挑战码文件），已清除令牌。请重新执行 git push 触发新挑战码。"
+            exit 0
+        fi
+
+        if [ -f "$_PG_CHALLENGE" ] && ! _pg_expired "$_PG_CHALLENGE"; then
+            _PG_C_CONTENT=$(cat "$_PG_CHALLENGE" 2>/dev/null || true)
+            _PG_C_NONCE=$(printf '%s' "$_PG_C_CONTENT" | cut -d: -f1)
+            _PG_C_HASH=$(printf '%s' "$_PG_C_CONTENT" | cut -d: -f2)
+            if [ "$_PG_C_HASH" = "$_PG_HASH" ]; then
+                _pg_deny "push 需要 PM 审批（挑战码已生成，等待批准）。" "$_PG_C_NONCE"
+                exit 0
+            fi
+            # HEAD 已变更 → 旧挑战码作废，fall through 生成新码
+            rm -f "$_PG_CHALLENGE"
+        fi
+
+        # 生成新挑战码（od 4 字节随机 → 8 位 hex，对齐 pre-push）
+        mkdir -p "${_PG_DIR}/.harness" 2>/dev/null || true
+        if [ ! -d "${_PG_DIR}/.harness" ]; then
+            # fail-open：状态目录不可创建（只读挂载等）时不阻塞 push，仅 stderr 告警
+            echo "[git-guard] 无法创建 ${_PG_DIR}/.harness，会话级 push 审批不可用，fail-open 放行" >&2
+            exit 0
+        fi
+        rm -f "$_PG_CHALLENGE" 2>/dev/null || true
+        _PG_NONCE=$(od -An -tx1 -N4 /dev/urandom | tr -d ' \n' || true)
+        printf '%s:%s:%s\n' "$_PG_NONCE" "$_PG_HASH" "$(date +%s)" > "$_PG_CHALLENGE" 2>/dev/null || true
+        _pg_deny "push 需要 PM 审批（目标仓未安装 pre-push hook，由会话级门禁兜底）。" "$_PG_NONCE"
         exit 0
     fi
 fi

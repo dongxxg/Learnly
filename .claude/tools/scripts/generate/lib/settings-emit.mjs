@@ -278,6 +278,19 @@ export function codexHooksJson({ env } = {}) {
           ],
         },
       ],
+      // Issue #288：codex 主会话 Stop 直采（rollout 行偏移增量 → usage.jsonl trigger=main）
+      Stop: [
+        {
+          hooks: [
+            {
+              type: 'command',
+              command: `${e}bash .claude/hooks/shared/stop-main-session-usage.sh || true`,
+              statusMessage: 'Uni-AURI: Recording main session usage',
+              timeout: 20,
+            },
+          ],
+        },
+      ],
     },
   };
   // 把命令中的字面量 .claude/ 重定位为 $HARNESS_ROOT/，使配置自包含（不再依赖 .claude/）。

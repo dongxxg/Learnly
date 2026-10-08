@@ -36,8 +36,9 @@ rd-auto **仅在以下明确调用时触发**：
 ## 执行方式
 
 触发后：
-1. **意图明确**：直接调用 `Skill(skill="rd-auto")`，无需确认
+1. **意图明确**（召唤短语自带任务类别，如"用 rd-auto 修复 X"→ bug_fix）：直接调用 `Skill(skill="rd-auto")`，无需确认。可跳过独立 `/rd-auto parse` 调用，由主会话就地判定类别，但 `intent_category`/`confidence` 仍须随 init 的 `--intent-json` 传入——否则丢失 quick 自动升级
 2. **意图模糊**（明确调用了但任务类别不清）：先调用 `/rd-auto parse "<PM 原话>"` 获取结构化意图-json，再按结果路由
+3. **多意图冲突**（一句话同时命中多个 intent_category，如"修复 bug 并补充文档"）：禁止 AI 自行取舍——列出命中的候选类别及各自对应的 flow-type 走向，询问用户选择，按用户选定的类别路由
 
 ## intent_category 与 flow-type 自动升级（bug_fix 必读）
 
@@ -56,3 +57,11 @@ node .claude/skills/rd-auto/scripts/orchestrator.js init <name> \
 ```
 
 > 实证：fix-push-cleanup-hook（30 行 hook 修复）因 init 未传 `intent_category` 走了 development 全套，产出 ~2400 行文档；若传 `bug_fix` 会自动升 quick。这是操作问题，非框架缺陷——无需新机制，传对字段即可。
+
+## 路由审计留痕（规则层底线要求）
+
+每次 rd-auto 路由决策必须可追溯，实现层按下述约定落盘（具体字段扩展由实现自定，规则层只验收这三点）：
+
+- **位置**：`.harness/tasks/<change>/pipeline-state.json` —— 路由分类结果（intent_category / confidence / context_mode）持久化在 `intent` 字段；每次 dispatch 的起止记录在 `pipeline.<phase>.dispatch_history`（条目含 `started_at` / `completed_at` / `context_mode` / `exit_status` / `token_usage` / `wrapper_invoked`）
+- **保留期限**：change 全生命周期；archive 时 dispatch_history 归并进 `archive` 段随变更存档，不得提前清理
+- **用途**：flow-type 升级是否合规、wrapper 绕行检测（Phase 3a 防御校验消费 `wrapper_invoked`）、事后复盘路由是否可复现

@@ -101,3 +101,11 @@ build/
 .harness/.worktrees/
 .harness-projects
 .framework-manifest.vendored.bak
+/coverage/
+.claude/
+/harness
+
+# 业务仓库专有：本地框架安装状态（每个开发者各自跟踪，不跨开发者同步）
+.harness/.harness-version
+.harness/.installed-backend
+.framework-manifest

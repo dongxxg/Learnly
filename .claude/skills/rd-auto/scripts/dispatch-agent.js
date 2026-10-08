@@ -5,8 +5,9 @@
 //   1. cmdDispatchPrompt(<change>) 拿 dp（含 dp.backend.type / role / phase / context_pack / validation）
 //   2. 处理 dp.role === null 的 hint 分支（quick_change 主会话自处理）→ 输出 { action: "no_dispatch" }
 //   3. 渲染 dispatch-with-skill.md / dispatch-without-skill.md 得 finalPrompt
-//   4. cmdMarkDispatch(<change>, '--start') → read-modify-write pipeline-state.json 写 wrapper_invoked:true
-//   5. 按 dp.backend.type 分流：
+//   4. 校验 dp.backend.type 属于已知 backend（未知 → 直接 wrapper_error，不落任何状态，见 Step 4）
+//   5. cmdMarkDispatch(<change>, '--start') → read-modify-write pipeline-state.json 写 wrapper_invoked:true
+//   6. 按 dp.backend.type 分流：
 //      - codex/qoder：进程内加载对应 headless backend，调 dispatchSubAgent，输出完成结果
 //      - claude/codebuddy/zcode：输出 { action:"invoke_agent_tool", agent_args, post_dispatch, ... }，主会话二次执行
 //
@@ -50,7 +51,11 @@ function roleToSubagentType(role) {
 
 // 选取模板并渲染 finalPrompt（禁止让 sub-agent 自己 Read agent_path）
 function renderFinalPrompt(dp, rdSkill) {
-  const tplName = rdSkill ? 'dispatch-with-skill.md' : 'dispatch-without-skill.md';
+  // #315: design-review 有专用对抗性评审模板（占位符均在下方 replace 链覆盖）；
+  // 其余阶段沿用 skill 有无二选一
+  const tplName = dp.phase === 'design-review'
+    ? 'dispatch-design-review.md'
+    : (rdSkill ? 'dispatch-with-skill.md' : 'dispatch-without-skill.md');
   const tplPath = join(TEMPLATES_DIR, tplName);
   if (!existsSync(tplPath)) {
     throw new Error(`template not found: ${tplPath}`);
@@ -273,7 +278,38 @@ try {
   emitWrapperError(detectedBackend, `template render failed: ${e.message}`);
 }
 
-// Step 4: cmdMarkDispatch --start + read-modify-write wrapper_invoked（捕获 stdout）
+// Step 4: backend 分流判定（#322）
+//
+// WHY 判定必须先于任何落盘副作用：`mark-dispatch --start` 会往 dispatch_history 推入一条
+// completed_at:null 的开放条目，紧随其后的 markWrapperInvoked 又把它标成
+// wrapper_invoked:true。若这两步先于分流执行，未知 backend 走到末尾 emitWrapperError 时
+// 就会同时留下两个坏状态：
+//   1) 悬挂条目——completion 永远不会写，主会话必须手工 mark-dispatch --end 收尾；
+//   2) 门禁假通过——_assertWrapperInvoked（lib/cli-commands.js）只在末尾条目显式
+//      wrapper_invoked===false 时才拦截，此处已被写成 true，于是 advance 放行；
+//      状态里记录了"dispatch 已发生"，而子代理根本没被派发。危害高于死锁。
+// 所以：先确认 backend 已知且可处理，再落 --start。
+const backendType = dp.backend?.type || 'claude';
+// dsh（DeepSeek Harness）已从 dispatch 白名单移除（PM 决策，见 #322）：dsh 不作为 dispatch
+// 目标，走到下方 unknown backend 分支报 wrapper_error。注意其**实现**保留完好
+// （.claude/backends/dsh-backend.js + backend-factory.js 仍注册 dsh、stats.js 白名单仍含 dsh），
+// 只是 wrapper 不再把 dp.backend.type==='dsh' 路由到任何分支——便于将来恢复 dispatch 能力时
+// 只需把 'dsh' 加回本数组，无需重建 backend。
+// 另注：stats.js 的 by_backend 白名单与「是否支持 dispatch」无关，它管报表归类，
+// 防止历史 dsh 记录被误并进 'unknown' 桶并刷假告警，故保持不动。
+const NATIVE_AGENT_TOOL_BACKENDS = ['claude', 'codebuddy', 'zcode'];
+const HEADLESS_CLI_BACKENDS = ['codex', 'qoder'];
+const isNativeAgentToolBackend = NATIVE_AGENT_TOOL_BACKENDS.includes(backendType);
+const isHeadlessCliBackend = HEADLESS_CLI_BACKENDS.includes(backendType);
+if (!isNativeAgentToolBackend && !isHeadlessCliBackend) {
+  // 此处零状态副作用：dispatch_history 不新增条目，wrapper_invoked 不写入
+  emitWrapperError(backendType, `unknown backend type: ${backendType}`);
+}
+
+const subagentType = roleToSubagentType(dp.role);
+const description = `${changeName}/${dp.phase}/${dp.role}`;
+
+// Step 5: cmdMarkDispatch --start + read-modify-write wrapper_invoked（捕获 stdout）
 try {
   runWithCapturedStdout(() => cmdMarkDispatch([changeName, '--start']));
 } catch (e) {
@@ -301,12 +337,8 @@ try {
   // 但 advance 会在下次 rework 时覆盖写入，不会无限循环
 }
 
-// Step 5: 按 backend.type 分流
-const backendType = dp.backend?.type || 'claude';
-const subagentType = roleToSubagentType(dp.role);
-const description = `${changeName}/${dp.phase}/${dp.role}`;
-
-if (backendType === 'codex' || backendType === 'qoder') {
+// Step 6: 按 backend.type 分流（Step 4 已排除未知值，末尾 else 仅为防御）
+if (isHeadlessCliBackend) {
   // Headless CLI 路径：动态加载 backend，直接 dispatch。
   try {
     const backendConfig = backendType === 'qoder'
@@ -368,11 +400,17 @@ if (backendType === 'codex' || backendType === 'qoder') {
     }
 
     // mark-dispatch --end（headless 路径 wrapper 内部完成，主会话无需再调）
+    // #314: design-review 的 verdict（APPROVED|REWORK_NEEDED）随结果透传落盘；
+    // 仅认合法枚举——mark-dispatch 对非法枚举 errExit（process.exit 不可被
+    // try/catch 捕获，会杀死 wrapper），垃圾值直接丢弃、由 advance 按仅 P0 判定
+    const validVerdict = (normalized.verdict === 'APPROVED' || normalized.verdict === 'REWORK_NEEDED')
+      ? normalized.verdict : null;
     try {
       runWithCapturedStdout(() => cmdMarkDispatch([changeName, '--end',
                         '--exit-status', normalized.exit_status || 'DONE',
                         '--summary', (normalized.summary || '').slice(0, 200),
                         '--backend', backendType,
+                        ...(validVerdict ? ['--verdict', validVerdict] : []),
                         ...tokenArgs]));
     } catch (e) {
       debugLog(`mark-dispatch --end failed — ${e.message}`);
@@ -390,9 +428,10 @@ if (backendType === 'codex' || backendType === 'qoder') {
   } catch (e) {
     emitWrapperError(backendType, `${backendType} dispatch failed: ${e.message}`);
   }
-} else if (backendType === 'claude' || backendType === 'codebuddy' || backendType === 'zcode') {
+} else if (isNativeAgentToolBackend) {
   // 原生 Agent 工具路径：ZCode 没有文档化的 headless CLI，因此与 Claude/CodeBuddy
   // 一样由主会话调用内置 Agent 工具，同时保留 backend 标识。
+  // dsh 曾归入此分支，现已从白名单移除（见 Step 4 WHY 注释）。
   output({
     backend: backendType,
     action: 'invoke_agent_tool',
@@ -402,7 +441,9 @@ if (backendType === 'codex' || backendType === 'qoder') {
       description,
     },
     post_dispatch: {
-      mark_dispatch_end_cmd: `node orchestrator.js mark-dispatch ${changeName} --end --exit-status <STATUS> --summary <SUMMARY> --backend ${backendType}`,
+      // #314: design-review 阶段追加 --verdict 占位，提示主会话回传评审结论
+      mark_dispatch_end_cmd: `node orchestrator.js mark-dispatch ${changeName} --end --exit-status <STATUS> --summary <SUMMARY> --backend ${backendType}`
+        + (dp.phase === 'design-review' ? ' --verdict <APPROVED|REWORK_NEEDED>' : ''),
     },
     wrapper_invoked: true,
   });

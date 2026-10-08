@@ -143,6 +143,29 @@ async function main() {
     process.exit(0);
   }
 
+  // ─── Backend 分流判定（#322）───
+  // WHY 判定必须先于 createWorktrees：worktree 是有盘上副作用的（git worktree add），
+  // 未知 backend 若在创建之后才报错，就会留下孤儿 worktree（需人工 git worktree prune）。
+  // dsh（DeepSeek Harness）已从 dispatch 白名单移除（PM 决策，见 #322）：dsh 不作为 dispatch
+  // 目标，走到下方 unknown backend 分支报 wrapper_error —— 由于本判定在 createWorktrees
+  // 之前，dsh 不会创建任何 worktree，零落盘副作用。
+  // 其**实现**保留完好（dsh-backend.js + backend-factory.js 仍注册 dsh、stats.js 白名单仍含
+  // dsh），只是 wrapper 不再把 backendType==='dsh' 路由到任何分支；将来恢复只需把 'dsh'
+  // 加回本数组。stats.js 白名单管报表归类（防历史 dsh 记录被误并进 'unknown' 桶刷假告警），
+  // 与「是否支持 dispatch」无关，故保持不动。
+  const NATIVE_AGENT_TOOL_BACKENDS = ['claude', 'codebuddy', 'zcode'];
+  const isNativeAgentToolBackend = NATIVE_AGENT_TOOL_BACKENDS.includes(backendType);
+  // headless CLI 配置：codex/qoder 各一份；其余（含原生分支）为 null
+  const headlessBackendConfig = backendType === 'qoder'
+    ? { file: 'qoder-backend.js', exportName: 'QoderBackend', logsDir: 'qoder-logs' }
+    : backendType === 'codex'
+      ? { file: 'codex-backend.js', exportName: 'CodexBackend', logsDir: 'codex-logs' }
+      : null;
+  if (!isNativeAgentToolBackend && !headlessBackendConfig) {
+    output({ backend: backendType, action: 'wrapper_error', error: `unknown backend type: ${backendType}`, wrapper_invoked: true });
+    process.exit(1);
+  }
+
   // Create worktrees
   const agentsWithWt = createWorktrees(changeName, plan.agents);
 
@@ -232,7 +255,8 @@ async function main() {
 
   // ─── Native Agent-tool backends: render prompts, output for main session ───
   // ZCode has no documented headless CLI and uses its built-in Agent tool.
-  if (backendType === 'claude' || backendType === 'codebuddy' || backendType === 'zcode') {
+  // dsh 曾归入此分支，现已从白名单移除（见上方分流判定 WHY 注释）。
+  if (isNativeAgentToolBackend) {
     const agents = agentsWithWt.map((agent) => {
       if (agent.error) {
         return {
@@ -276,15 +300,8 @@ async function main() {
   }
 
   // ─── Headless backend: parallel dispatch via CLI ───
-  const backendConfig = backendType === 'qoder'
-    ? { file: 'qoder-backend.js', exportName: 'QoderBackend', logsDir: 'qoder-logs' }
-    : backendType === 'codex'
-      ? { file: 'codex-backend.js', exportName: 'CodexBackend', logsDir: 'codex-logs' }
-      : null;
-  if (!backendConfig) {
-    output({ backend: backendType, action: 'wrapper_error', error: `unknown headless backend: ${backendType}`, wrapper_invoked: true });
-    process.exit(1);
-  }
+  // 配置已在 createWorktrees 之前解析（见上方分流判定），此处复用同一份
+  const backendConfig = headlessBackendConfig;
 
   let BackendClass, normalizeDispatchResult;
   try {

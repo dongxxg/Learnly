@@ -157,3 +157,100 @@ export function extractCodexSubagentTokenUsage(startedAt, completedAt, opts = {}
     return null;
   }
 }
+
+/**
+ * codex 主会话 rollout 按行偏移增量提取（Issue #288：主会话 Stop 直采）。
+ *
+ * 与 subagent 时间窗归集的差别：主会话 Stop hook 持有 per-session 行偏移
+ * （--from-line / --advance-offset-file，与 claude track 的 transcript 增量
+ * 同一水位线机制），按「行偏移窗口」而非「时间窗」切增量——Stop 时刻与事件
+ * 落盘时间无稳定先后关系，时间窗会漏计或多计跨轮事件。
+ *
+ * 增量口径与 collect-ai.js collectCodexSessionTokens / subagent 归集一致
+ * （!268/!276 结论）：
+ *   - 窗口内首个「文件级首事件」（prevTotal===null）用 last_token_usage
+ *     （resume 新文件 total 含继承历史，last 恰为真实增量）
+ *   - 其后事件按 Δtotal（逐字段 max(0) 钳制）；total 下跳不推进基线
+ *   - 偏移前的事件只推进基线不计入（跨 Stop 轮次不重复计）
+ * 行度量：content.split('\n').filter(Boolean) 的下标——与 cli-commands.js
+ * countTranscriptLines / --advance-offset-file 回写同一度量，勿单独变更。
+ * 返回与 extractCodexSubagentTokenUsage 同形状（input_tokens 为 gross、含
+ * cached），无窗口内事件 → null。
+ * 注：不做 collect-ai 侧的回放簇剔除（REPLAY_BURST）——Stop 增量窗口一次只
+ * 覆盖一轮对话的少量事件，回放簇（≥30 条密集事件）不会整簇落进单窗口。
+ */
+export function extractCodexRolloutTokenUsage(rolloutPath, startLine = 0) {
+  try {
+    let content;
+    try { content = readFileSync(rolloutPath, 'utf8'); } catch { return null; }
+    const lines = content.split('\n').filter(Boolean);
+    if (lines.length === 0) return null;
+
+    const fromIdx = Number.isFinite(startLine) && startLine > 0 ? Math.floor(startLine) : 0;
+
+    let model = null;
+    const events = []; // {lineIdx, last, total} — 按文件行序
+    for (let i = 0; i < lines.length; i++) {
+      let entry;
+      try { entry = JSON.parse(lines[i]); } catch { continue; }
+      const et = (entry.payload && typeof entry.payload === 'object' && entry.payload.type) || entry.type;
+      if (et === 'turn_context') {
+        const mm = entry.payload && entry.payload.model;
+        if (typeof mm === 'string' && mm) model = mm;
+      } else if (et === 'token_count') {
+        const info = entry.payload && entry.payload.info;
+        if (info) events.push({ lineIdx: i, last: info.last_token_usage || null, total: info.total_token_usage || null });
+      }
+    }
+    if (events.length === 0) return null;
+
+    const agg = { input: 0, output: 0, cached: 0, cacheWrite: 0, reasoning: 0 };
+    let prevTotal = null;
+    let counted = 0;
+    for (const ev of events) {
+      const inWindow = ev.lineIdx >= fromIdx;
+      if (ev.total && prevTotal !== null) {
+        if (inWindow) {
+          agg.input += Math.max(0, num(ev.total.input_tokens) - num(prevTotal.input_tokens));
+          agg.output += Math.max(0, num(ev.total.output_tokens) - num(prevTotal.output_tokens));
+          agg.cached += Math.max(0, num(ev.total.cached_input_tokens) - num(prevTotal.cached_input_tokens));
+          agg.cacheWrite += Math.max(0, num(ev.total.cache_write_input_tokens) - num(prevTotal.cache_write_input_tokens));
+          agg.reasoning += Math.max(0, num(ev.total.reasoning_output_tokens) - num(prevTotal.reasoning_output_tokens));
+          counted += 1;
+        }
+      } else if (inWindow && prevTotal === null) {
+        // 文件级首事件落在窗口内：优先 last（继承前缀只在 total 中）
+        const src = ev.last || ev.total;
+        if (src) {
+          agg.input += num(src.input_tokens);
+          agg.output += num(src.output_tokens);
+          agg.cached += num(src.cached_input_tokens);
+          agg.cacheWrite += num(src.cache_write_input_tokens);
+          agg.reasoning += num(src.reasoning_output_tokens);
+          counted += 1;
+        }
+      } else if (inWindow) {
+        counted += 1; // 无 total 的事件：不计增量但算作窗口内事件
+      }
+      if (ev.total) {
+        // total 下跳不推进基线（与 collectCodexSessionTokens 同语义）
+        const down = prevTotal !== null
+          && num(ev.total.total_tokens) < num(prevTotal.total_tokens);
+        if (!down) prevTotal = ev.total;
+      }
+    }
+    if (counted === 0) return null;
+
+    return {
+      input_tokens: agg.input,
+      output_tokens: agg.output,
+      cache_read_input_tokens: agg.cached,
+      cache_creation_input_tokens: agg.cacheWrite,
+      reasoning_output_tokens: agg.reasoning,
+      model,
+    };
+  } catch (e) {
+    debugLog('extractCodexRolloutTokenUsage failed —', e.message);
+    return null;
+  }
+}

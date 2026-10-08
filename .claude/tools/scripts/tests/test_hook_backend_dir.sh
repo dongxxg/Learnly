@@ -292,15 +292,19 @@ test_multivalue_config() {
 }
 
 # ============================================================
-# T-extra: pre-push 路径引用验证（CHALLENGE_FILE / TOKEN_FILE 用 .harness/）
+# T-extra: pre-push 路径引用验证（CHALLENGE_FILE / TOKEN_FILE 经 MARKER_DIR 落在 .harness/）
+# !320 起 marker 路径由状态根 MARKER_DIR 拼接（跨仓推送时相对 cwd 会写错位置）
 # ============================================================
 test_pre_push_path_refs() {
     echo "=== T-extra: pre-push 路径引用 ==="
-    assert "pre-push CHALLENGE_FILE 用 .harness/.push-challenge" \
-           "$(grep -q 'CHALLENGE_FILE=".harness/.push-challenge"' "$PRE_PUSH" && echo true || echo false)"
-    assert "pre-push TOKEN_FILE 用 .harness/.push-approved" \
-           "$(grep -q 'TOKEN_FILE=".harness/.push-approved"' "$PRE_PUSH" && echo true || echo false)"
-    assert "pre-push 提示文字用 .harness/.push-approved (无字面 .claude/.push-approved)" \
+    assert "pre-push CHALLENGE_FILE 用 \${MARKER_DIR}/.push-challenge" \
+           "$(grep -q 'CHALLENGE_FILE="\${MARKER_DIR}/.push-challenge"' "$PRE_PUSH" && echo true || echo false)"
+    assert "pre-push TOKEN_FILE 用 \${MARKER_DIR}/.push-approved" \
+           "$(grep -q 'TOKEN_FILE="\${MARKER_DIR}/.push-approved"' "$PRE_PUSH" && echo true || echo false)"
+    # 落点不变式：MARKER_DIR 仍锚定 .harness/
+    assert "pre-push MARKER_DIR 锚定 .harness/" \
+           "$(grep -q 'MARKER_DIR=.*\.harness' "$PRE_PUSH" && echo true || echo false)"
+    assert "pre-push 提示文字用 \${MARKER_DIR}/.push-approved (无字面 .claude/.push-approved)" \
            "$(! grep -q '\.claude/\.push-approved' "$PRE_PUSH" && echo true || echo false)"
     assert "pre-push 不含 _HARNESS_DIR 死代码（DBC-003）" \
            "$(! grep -q '_HARNESS_DIR=.*config.*harness.backend-dir' "$PRE_PUSH" && echo true || echo false)"

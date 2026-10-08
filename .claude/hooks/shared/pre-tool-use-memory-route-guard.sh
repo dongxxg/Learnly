@@ -16,7 +16,11 @@ PROJECTS_DIR="$(_expand_home "$_raw_projects_dir")"
 PROJECTS_SEGMENT="$PROJECTS_DIR"
 PROJECTS_DISPLAY="${PROJECTS_DIR/#$HOME/~}"
 
-INPUT=$(cat)
+# issue !308：带超时读 stdin；超时/读失败 fail-open（放行好过阻塞工具调用 60s）
+INPUT=$(hook_read_stdin) || {
+    echo "[memory-route-guard] stdin 读取超时/失败，fail-open 放行（issue !308）" >&2
+    exit 0
+}
 TOOL=$(_jq_val "$INPUT" tool_name)
 
 # 只拦截 Write 和 Edit

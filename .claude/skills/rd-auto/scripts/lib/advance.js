@@ -1,7 +1,7 @@
 // lib/advance.js — Pipeline advance logic (advanceImpl, teamAdvance, helpers)
-import { existsSync, readFileSync, mkdirSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { execSync, spawn } from 'node:child_process';
+import { execSync, execFileSync, spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import {
   PROJECT_ROOT, RULES_PATH, errExit, debugLog, METRICS_THROTTLE_MS, SCRIPTS_DIR,
@@ -167,8 +167,97 @@ export function resolveAdvanceScore(score, state, currentPhase) {
   return { value: 0, source: 'zero' };
 }
 
+// Resolve the exit_status consumed by ALL advance routing decisions (#312).
+//
+// Root cause: cmdAdvance used to default --exit-status to 'DONE', so a bare
+// `advance` after `mark-dispatch --end --exit-status NEEDS_PM` re-entered the
+// DONE branch and silently advanced past the worker's PM-decision request.
+//
+// Multi-layer fallback (mirrors resolveAdvanceScore):
+//   1. explicit advance --exit-status arg — the ONLY way to continue after a
+//      PM verdict (cmdAdvance filters parseArgs' valueless-flag 'true')
+//   2. current phase's last dispatch_history exit_status — fresh per-dispatch
+//      data written by mark-dispatch --end for THIS dispatch
+//   3. 'DONE' — original semantics
+//
+// Deliberately does NOT read state.pipeline[phase].exit_status: that field is
+// written by a PREVIOUS advance call and survives rework-loop resets, so it
+// can be stale (an old NEEDS_PM/BLOCKED would re-block forever). Only the
+// per-dispatch dispatch_history entry is trustworthy.
+export function resolveAdvanceExitStatus(exitStatus, state, currentPhase) {
+  // 1. Explicit wins (non-empty string; 'true' is parseArgs' valueless-flag artifact).
+  if (typeof exitStatus === 'string' && exitStatus !== '' && exitStatus !== 'true') {
+    return { value: exitStatus, source: 'explicit' };
+  }
+  // 2. dispatch_history last entry (non-empty; 'null' guards legacy stringified nulls).
+  const hist = state?.pipeline?.[currentPhase]?.dispatch_history;
+  if (Array.isArray(hist) && hist.length > 0) {
+    const fromHist = hist[hist.length - 1]?.exit_status;
+    if (typeof fromHist === 'string' && fromHist !== '' && fromHist !== 'null' && fromHist !== 'true') {
+      return { value: fromHist, source: 'dispatch-history' };
+    }
+  }
+  // 3. Original semantics: missing → DONE.
+  return { value: 'DONE', source: 'default' };
+}
+
+// Resolve the design-review verdict: APPROVED | REWORK_NEEDED (#314).
+// Multi-layer fallback (mirrors resolveAdvanceScore / resolveAdvanceExitStatus):
+//   1. explicit advance --verdict（cmdAdvance 对非法枚举 errExit，此处仅认合法值，
+//      非枚举显式值防御性落入下层，避免误路由）
+//   2. state.pipeline['design-review'].verdict — mark-dispatch --verdict 落盘
+//   3. defensive: current phase's last dispatch_history verdict（warn at call site）
+//   4. null — 旧数据无 verdict：仅按 P0 判定（向后兼容）
+export function resolveDesignVerdict(verdict, state, currentPhase) {
+  if (verdict === 'APPROVED' || verdict === 'REWORK_NEEDED') {
+    return { value: verdict, source: 'explicit' };
+  }
+  const fromState = state?.pipeline?.[currentPhase]?.verdict;
+  if (fromState === 'APPROVED' || fromState === 'REWORK_NEEDED') {
+    return { value: fromState, source: 'pipeline-phase' };
+  }
+  const hist = state?.pipeline?.[currentPhase]?.dispatch_history;
+  if (Array.isArray(hist) && hist.length > 0) {
+    const fromHist = hist[hist.length - 1]?.verdict;
+    if (fromHist === 'APPROVED' || fromHist === 'REWORK_NEEDED') {
+      return { value: fromHist, source: 'dispatch-history' };
+    }
+  }
+  return { value: null, source: 'missing' };
+}
+
+// #298 archive→complete 完成门禁：校验 archive 阶段确实被 dispatch 过。
+//
+// 背景：archive 是 DAG 上唯一能把 nextPhase 推到 'complete' 的常规阶段（debate/code-review
+// 通过后只是路由到 archive），而 exit_status 缺省经 resolveAdvanceExitStatus 兜底为 'DONE'。
+// 修复前只要 current_phase === 'archive'，一次裸 advance 就会把 archive 标 done、把任务目录
+// renameSync 进 tasks/archive/ —— archive 从未执行，.harness/spec/archive/<date>-<change>/
+// 不存在、主规格未同步，且任务目录已移走，无法再补做。
+//
+// 判定依据复用 dispatch_history（与 resolveAdvanceScore / resolveAdvanceExitStatus 同源，
+// 不新造制品探测路径）：archive 阶段必须存在一条**已闭合**（completed_at 非空）的 dispatch
+// 记录，即 mark-dispatch --start / --end 成对出现过。正常路径（wrapper 派发 architect 跑
+// rd:archive → mark-dispatch --end）天然满足，不会误伤。
+//
+// 刻意不校验 .harness/spec/archive/ 制品路径：archive 目录命名（<date>-<change>）、docs_mode
+// 与 openspec/ 布局因项目而异，路径探测的误伤面大于收益；dispatch 记录是"阶段被执行过"的
+// 最小可信证据。
+export function resolveArchiveCompletionGate(state) {
+  const hist = state?.pipeline?.archive?.dispatch_history;
+  if (!Array.isArray(hist) || hist.length === 0) {
+    return { ok: false, reason: 'archive 阶段无 dispatch_history 记录（archive 未实际执行）' };
+  }
+  if (!hist.some(h => h && h.completed_at)) {
+    return { ok: false, reason: 'archive 阶段的 dispatch 未闭合（缺 mark-dispatch --end）' };
+  }
+  return { ok: true };
+}
+
+// development 主链 DAG 顺序（getPreviousSummary 摘要回溯与 #315 返工回流判定共用）
+const DAG_PHASE_ORDER = ['intake', 'explore', 'propose', 'design-review', 'implement', 'test', 'code-review', 'debate', 'archive'];
+
 export function getPreviousSummary(state, currentPhase) {
-  const phaseOrder = ['intake', 'explore', 'propose', 'design-review', 'implement', 'test', 'code-review', 'debate', 'archive'];
+  const phaseOrder = DAG_PHASE_ORDER;
   // issue !247: rework target role (developer/architect/tester) has no DAG
   // position — anchor the walk at the phase where the rework originated, so
   // dispatch-prompt shows the review context instead of '（无前一阶段）'.
@@ -283,44 +372,155 @@ function deferOpenP1Concerns(changeName, deferredBy) {
 
 // ─── Inline Smoke Check ───
 
+// 编译/lint 步骤表（#326）：execFile(bin, argv) 直连执行，argv 为数组，不经过 shell。
+// 每个语言下的步骤按数组顺序尝试——等价于原命令串里 `||` 链的"前一步成功即停止"。
+// 步骤"不适用"的四种情形（见 runSteps）都不算失败：工具未安装（ENOENT）/
+// package.json 未声明该 script / 项目本地没装该工具（npx 会转而去联网安装）/
+// 无可编译目标文件。否则去掉 shell 后，原本被管道退出码与 `|| true` 掩盖的
+// "环境缺失"会被升级成误阻断。
+const SMOKE_STEPS = {
+  go: {
+    detect: ['go.mod'],
+    compile: [{ bin: 'go', args: ['build', './...'] }],
+    lint:    [{ bin: 'golangci-lint', args: ['run', '--new-from-rev=HEAD~5'] }],
+  },
+  tsjs: {
+    detect: ['package.json'],
+    compile: [
+      { bin: 'npm', args: ['run', 'build'], npmScript: 'build' },
+      { bin: 'npx', args: ['tsc', '--noEmit'], requireLocal: 'typescript' },
+    ],
+    lint: [
+      { bin: 'npm', args: ['run', 'lint'], npmScript: 'lint' },
+      { bin: 'npx', args: ['eslint', '.'], requireLocal: 'eslint' },
+    ],
+  },
+  py: {
+    detect: ['setup.py', 'pyproject.toml'],
+    compile: [{ bin: 'python3', args: ['-m', 'py_compile'], pyFiles: true }],
+    lint:    [{ bin: 'ruff', args: ['check', '.'] }],
+  },
+};
+
+const SMOKE_TAIL_LINES = 20;
+
+// 取末 N 行：原实现把 `| tail -20` 拼进命令串、依赖 POSIX shell，Windows 下
+// execSync 走 cmd.exe，tail 不存在 → 整条命令失败 → 被归类为 compile failed
+// → 误判回退 implement（#326）。改为 Node 侧裁剪，彻底去掉 shell 工具依赖。
+export function tailLines(text, n = SMOKE_TAIL_LINES) {
+  const lines = String(text ?? '').replace(/\r\n/g, '\n').split('\n');
+  if (lines.length && lines[lines.length - 1] === '') lines.pop();  // 末尾换行不产空行
+  return lines.slice(-n).join('\n');
+}
+
+// 等价于原 `$(find . -name "*.py" -not -path "./venv/*" | head -20)`：
+// 递归收集 .py 并保持 20 个上限，跳过虚拟环境/依赖目录——否则第三方库的语法
+// 错误会被算到本次变更头上。
+const PY_SKIP_DIRS = new Set(['venv', '.venv', 'env', '.git', 'node_modules', '__pycache__', '.tox', '.mypy_cache']);
+function collectPyFiles(root, limit = 20) {
+  const found = [];
+  const walk = (dir) => {
+    if (found.length >= limit) return;
+    let entries;
+    try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      if (found.length >= limit) return;
+      if (e.isDirectory()) {
+        if (!PY_SKIP_DIRS.has(e.name)) walk(join(dir, e.name));
+      } else if (e.isFile() && e.name.endsWith('.py')) {
+        found.push(join(dir, e.name));
+      }
+    }
+  };
+  walk(root);
+  return found;
+}
+
+// `npm run <script>` 前置检查：package.json 未声明该 script 时 npm 必然以
+// "Missing script" 退出非 0 —— 那是"没这条命令"，不是编译/lint 失败 → 该步骤不适用。
+function npmScriptDeclared(root, name) {
+  try {
+    const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
+    return Boolean(pkg && pkg.scripts && pkg.scripts[name]);
+  } catch { return false; }
+}
+
+// npx 回退步骤的前置检查：项目本地没装该包时 npx 会尝试联网下载，离线/受限网络
+// 下以网络错误退出非 0 → 会被当成"编译失败"（假阳性）。本地没装即视为该步骤不适用。
+function localToolInstalled(root, pkgName) {
+  return existsSync(join(root, 'node_modules', pkgName));
+}
+
+// 执行单步。去掉 shell 是 #326 的核心（原实现在 Windows 下经 cmd.exe 执行
+// `... | tail -20`：tail 缺失即整条命令失败）。唯一例外：Windows 上 npm/npx 是
+// .cmd，Node >= 18.20.2 起直接 spawn .cmd 会抛 EINVAL（CVE-2024-27980 加固），
+// 必须经 shell（cmd.exe 能解析 .cmd）启动，故仅对这两者打开 shell。
+function smokeExec(bin, argv, cwd) {
+  const useShell = process.platform === 'win32' && (bin === 'npm' || bin === 'npx');
+  return execFileSync(bin, argv, {
+    encoding: 'utf-8', cwd, timeout: 120000, stdio: ['pipe', 'pipe', 'pipe'],
+    ...(useShell ? { shell: true } : {}),
+  }) || '';
+}
+
+// 按序尝试 steps，返回 { ok, attempted, lastError, stdout }：
+//   ok        任一（适用且真正执行的）步骤成功
+//   attempted 有步骤真正执行过且失败 —— 只有此时才允许判"失败"，
+//             否则只说明本机/本项目没有可用的构建命令（跳过）
+function runSteps(steps, root, extraArgs = []) {
+  let attempted = false;
+  let lastError = null;
+  for (const step of (steps || [])) {
+    if (step.npmScript && !npmScriptDeclared(root, step.npmScript)) continue;
+    if (step.requireLocal && !localToolInstalled(root, step.requireLocal)) continue;
+    if (step.pyFiles && extraArgs.length === 0) continue;   // 无 .py 文件：无可编译目标
+    const argv = step.pyFiles ? [...step.args, ...extraArgs] : step.args;
+    try {
+      return { ok: true, attempted, lastError, stdout: smokeExec(step.bin, argv, root) };
+    } catch (e) {
+      if (e.code === 'ENOENT') continue;   // 工具未安装 → 该步骤不适用
+      attempted = true;
+      lastError = e;
+    }
+  }
+  return { ok: false, attempted, lastError, stdout: '' };
+}
+
 export function runSmokeCheck() {
-  const compileCmds = {
-    go:   { detect: 'go.mod',       cmd: 'go build ./... 2>&1 | tail -20' },
-    tsjs: { detect: 'package.json',  cmd: 'npm run build 2>&1 | tail -20 || npx tsc --noEmit 2>&1 | tail -20' },
-    py:   { detect: 'setup.py',     cmd: 'python3 -m py_compile $(find . -name "*.py" -not -path "./venv/*" | head -20) 2>&1 | tail -20' },
-  };
-  const lintCmds = {
-    go:   'golangci-lint run --new-from-rev=HEAD~5 2>&1 | tail -20 || true',
-    tsjs: 'npm run lint 2>&1 | tail -20 || npx eslint . 2>&1 | tail -20 || true',
-    py:   'ruff check . 2>&1 | tail -20 || true',
-  };
+  // TODO(#326): 语言探测与执行目录都锁 PROJECT_ROOT —— 它是"多仓工作区的根"
+  // （constants.js 向上找 .harness/ 得到）。根目录有 package.json 而变更在
+  // Go/Python 子仓时，会探测成错误的语言并构建错误的目录。正确修法需要
+  // "模块名 → 子仓路径"的映射，而 state.intent.modules 只有模块名、没有该映射
+  // （直接拼路径属猜测），故本轮不做行为改动，仅标记（详见该 issue 交付说明）。
+  const root = PROJECT_ROOT;
 
   let lang = null;
-  if (existsSync(join(PROJECT_ROOT, 'go.mod')))         lang = 'go';
-  else if (existsSync(join(PROJECT_ROOT, 'package.json'))) lang = 'tsjs';
-  else if (existsSync(join(PROJECT_ROOT, 'setup.py')) ||
-           existsSync(join(PROJECT_ROOT, 'pyproject.toml'))) lang = 'py';
-
+  for (const [name, conf] of Object.entries(SMOKE_STEPS)) {
+    if (conf.detect.some(f => existsSync(join(root, f)))) { lang = name; break; }
+  }
   if (!lang) return { passed: true, summary: 'no build system detected, skip compile/lint' };
 
+  const conf = SMOKE_STEPS[lang];
   const failures = [];
-  if (compileCmds[lang]) {
-    try {
-      const result = execSync(compileCmds[lang].cmd, { encoding: 'utf-8', cwd: PROJECT_ROOT, timeout: 120000, stdio: ['pipe', 'pipe', 'pipe'] });
-      if (result.trim() && /error|fail|cannot|undefined|fatal/i.test(result)) {
-        failures.push(`compile: ${result.trim().slice(0, 200)}`);
-      }
-    } catch (e) {
-      failures.push(`compile failed: ${((e.stdout || '') + (e.stderr || '')).trim().slice(0, 200)}`);
+  const pyFiles = conf.compile.some(s => s.pyFiles) ? collectPyFiles(root) : [];
+
+  const compile = runSteps(conf.compile, root, pyFiles);
+  if (compile.ok) {
+    const out = tailLines(compile.stdout.trim());
+    if (out && /error|fail|cannot|undefined|fatal/i.test(out)) {
+      failures.push(`compile: ${out.slice(0, 200)}`);
     }
-    if (lintCmds[lang]) {
-      try {
-        execSync(lintCmds[lang], { encoding: 'utf-8', cwd: PROJECT_ROOT, timeout: 120000, stdio: ['pipe', 'pipe', 'pipe'] });
-      } catch (e) {
-        const out = ((e.stdout || '') + (e.stderr || '')).trim();
-        if (out) failures.push(`lint: ${out.slice(0, 200)}`);
-      }
-    }
+  } else if (compile.attempted) {
+    // 失败输出同样裁剪到末 N 行（原先由 shell 的 tail 负责）再截 200 字符
+    const err = tailLines(((compile.lastError?.stdout || '') + (compile.lastError?.stderr || '')).trim());
+    failures.push(`compile failed: ${err.slice(0, 200)}`);
+  }
+
+  // lint 不阻断：passed 只看 compile failed，lint 输出仅进 summary 供人排查
+  const lint = runSteps(conf.lint, root);
+  if (!lint.ok && lint.attempted) {
+    const out = tailLines(((lint.lastError?.stdout || '') + (lint.lastError?.stderr || '')).trim());
+    if (out) failures.push(`lint: ${out.slice(0, 200)}`);
   }
 
   const hasCompileError = failures.some(f => f.startsWith('compile failed'));
@@ -359,11 +559,28 @@ export function tryPushMetrics(throttleMs = METRICS_THROTTLE_MS) {
 
 // ─── Advanced Advance Implementation ───
 
+// 虚拟路由阶段：出现在 transitions 表里、但**不对应** pipeline 阶段体的目标。
+// 'rework' 自 !247 起只作历史标记——真实返工由 buildReworkResponse 把
+// current_phase 推进到 REWORK_TARGET_ROLES（并在 pipeline 中建条目），
+// 'rework' 字面量仅由 design-review 的 REWORK_NEEDED 显式边命中
+// （见 harness-rules.yaml 该边注释 + tests/advance-exit-status.test.mjs ④b）。
+// 存在性防御必须放行它们，否则会改掉 #312 的既有契约。
+const VIRTUAL_ROUTE_PHASES = new Set(['rework']);
+
 export function advanceImpl(changeName, opts) {
   const rules = parseRules(RULES_PATH);
   const state = stateLoad(changeName);
-  const { exit_status, score, p0_count, p1_count, summary, dimension, artifacts, rework_reason } = opts;
+  const { exit_status: exitStatusArg, score, p0_count, p1_count, summary, dimension, artifacts, rework_reason, verdict } = opts;
   const defaultDimension = state.docs_mode ? 'doc/ux_quality' : 'code/implementation';
+
+  // #312 exit_status 桥接：显式传参 > dispatch_history 末条 > DONE（原 CLI 默认语义）。
+  // resolved 值供后续全部消费者（status 映射、BLOCKED/NEEDS_PM/NEEDS_CONTEXT/
+  // DONE_WITH_CONCERNS 分支、各特判与 reason 文案）使用。
+  const exitBridge = resolveAdvanceExitStatus(exitStatusArg, state, state.current_phase);
+  if (exitBridge.source === 'dispatch-history') {
+    console.warn(`[harness] advance: exit_status 未传，已从 dispatch_history 兜底为 ${exitBridge.value}，建议 advance 显式带 --exit-status`);
+  }
+  const exit_status = exitBridge.value;
 
   // Update current phase status
   const currentPhase = state.current_phase;
@@ -695,9 +912,20 @@ export function advanceImpl(changeName, opts) {
         return buildReworkResponse(changeName, currentPhase, rework, `score ${s} >= ${condPassThreshold} but P1 count ${p1} > 2, developer fixes P1`, state, rules);
       }
     } else if (s >= debateTrigger) {
-      nextPhase = 'debate';
-      unmarkSkippedPhase(state, 'debate');
-      reason = `score ${s} in [${debateTrigger},${condPassThreshold}), triggers debate`;
+      // #326: test-only / config-change 的 pipeline map 没有 debate 阶段（两者共用这份
+      // code-review 路由），无条件置 debate 会把 current_phase 写到 pipeline 之外 →
+      // mark-dispatch 报 "No active phase" 死路。无该阶段时直通 archive。
+      // 此处**不需要** markSkippedPhase：该函数对 pipeline map 中不存在的阶段直接
+      // return（state-store.js 的 `if (!state.pipeline[phase]) return`），且不存在的
+      // 阶段本就不进 phases_total —— 不会有分母虚增或永停 pending 的问题。
+      if (!state.pipeline.debate) {
+        nextPhase = 'archive';
+        reason = `score ${s} in [${debateTrigger},${condPassThreshold}), flow '${state.flow_type}' has no debate phase → ${nextPhase}`;
+      } else {
+        nextPhase = 'debate';
+        unmarkSkippedPhase(state, 'debate');
+        reason = `score ${s} in [${debateTrigger},${condPassThreshold}), triggers debate`;
+      }
     } else {
       const rework = routeRework(state, dimension || defaultDimension, RULES_PATH);
       stateSave(changeName, state);
@@ -723,20 +951,61 @@ export function advanceImpl(changeName, opts) {
       stateSave(changeName, state);
       return buildReworkResponse(changeName, currentPhase, rework, `debate final score ${s} < ${dv.condPass}, block → rework ${rework.targets.join(', ')}`, state, rules);
     }
+  } else if (currentPhase === 'design-review' && exit_status === 'DONE') {
+    // #314 design-review 完成路由：消费 reviewer 的 verdict + P0 concerns。
+    // P0 一票否决优先于 verdict（对齐 code-review 分支的顺序）：
+    // verdict=APPROVED 但 P0>0 仍否决；verdict=REWORK_NEEDED 无 P0 也否决。
+    // 否决走 routeRework('architecture/design/tech_spec') → architect 修 propose 制品。
+    const verdictBridge = resolveDesignVerdict(verdict, state, currentPhase);
+    if (verdictBridge.source === 'dispatch-history') {
+      console.warn(`[harness] advance: design-review verdict 未传，已从 dispatch_history 兜底为 ${verdictBridge.value}，建议 mark-dispatch/advance 显式带 --verdict`);
+    }
+    let p0 = p0_count ?? 0;
+    if (p0 === 0) {
+      // 与 code-review 相同的兜底：未传 p0_count 时读 concerns.json，防止"沉默即通过"
+      p0 = countOpenP0FromConcerns(changeName);
+    }
+    const verdictLabel = verdictBridge.value || 'APPROVED'; // 旧数据无 verdict → 默认按 APPROVED 展示
+    if (p0 > 0 || verdictBridge.value === 'REWORK_NEEDED') {
+      const rework = routeRework(state, 'architecture/design/tech_spec', RULES_PATH);
+      stateSave(changeName, state);
+      return buildReworkResponse(changeName, currentPhase, rework, `design-review verdict=${verdictLabel}, P0 veto (p0_count=${p0}) → rework ${rework.targets.join(', ')}`, state, rules);
+    }
+    nextPhase = 'implement';
+    reason = `design-review verdict=${verdictLabel} (p0_count=${p0}) → ${nextPhase}`;
   } else if (REWORK_TARGET_ROLES.has(currentPhase) && exit_status === 'DONE') {
-    // issue !247: rework target role phase (developer/architect/tester) completed
-    // → return to code-review for re-scoring. Rework targets are role names (see
+    // issue !247 + #315: rework target role phase (developer/architect/tester)
+    // completed → 回到触发返工的 phase 复审。Rework targets are role names (see
     // buildReworkResponse), never real DAG phases, so standard transition matching
-    // would find no `from:` entry and escalate to PM ("no transition found"). This
-    // branch closes the rework loop: fix lands → code-review re-review → fresh score.
-    nextPhase = 'code-review';
-    reason = `rework target ${currentPhase} DONE → code-review re-review`;
+    // would find no `from:` entry and escalate to PM ("no transition found").
+    // rework_origins 由 buildReworkResponse 记录（#315）：取末位 origin（多轮返工时
+    // 最近一次触发者优先）。旧状态（#315 前发起的返工）无该字段 → 保持 legacy
+    // 行为回 code-review（!247 的兜底语义）。
+    const origins = state.pipeline[currentPhase]?.rework_origins || [];
+    const origin = origins[origins.length - 1];
+    if (origin && DAG_PHASE_ORDER.includes(origin)) {
+      // 复位 origin：清掉上轮的 completed_at/exit_status、置 pending，
+      // 由下方通用推进块重新置 in_progress（重新进入复审 dispatch）
+      delete state.pipeline[origin].completed_at;
+      delete state.pipeline[origin].exit_status;
+      state.pipeline[origin].status = 'pending';
+      nextPhase = origin;
+      reason = `rework target ${currentPhase} DONE → ${origin} re-review`;
+    } else {
+      nextPhase = 'code-review';
+      reason = `rework target ${currentPhase} DONE → code-review re-review (legacy default: no rework_origins)`;
+    }
   } else {
     // Standard transition matching
-    const match = transitions.find(t => t.from === currentPhase && (t.exit === 'DONE' || t.exit === exit_status || !t.exit));
+    // #314 两段式匹配：先精确 exit，再通配（无 exit 字段）。删除恒真的
+    // `t.exit === 'DONE'` 子句——它会在 exit_status 非 DONE 时误配 DONE 边
+    // （如 design-review 显式 REWORK_NEEDED 应命中显式边而非 DONE→implement）。
+    // exit_status === 'DONE' 时两段式结果与旧逻辑一致。
+    const match = transitions.find(t => t.from === currentPhase && t.exit === exit_status)
+      || transitions.find(t => t.from === currentPhase && !t.exit);
     if (match) {
       nextPhase = match.to;
-      reason = `${currentPhase} DONE → ${nextPhase}`;
+      reason = `${currentPhase} ${exit_status} → ${nextPhase}`;
     } else if (currentPhase === 'pending') {
       nextPhase = state.hotfix_mode ? 'implement' : 'intake';
       reason = `starting pipeline at ${nextPhase}`;
@@ -797,7 +1066,9 @@ export function advanceImpl(changeName, opts) {
   }
 
   // Design-review complexity gate
-  if (nextPhase === 'design-review') {
+  // #315: 仅 propose→design-review 首次进入受复杂度跳过约束。返工回流
+  // （architect DONE → design-review 复审）不得再次跳过，否则否决形同虚设。
+  if (nextPhase === 'design-review' && currentPhase === 'propose') {
     const complexity = determineComplexity(changeName);
     if (state.flow_type === 'refactor') {
       reason += `, complexity=${complexity}, design-review required (refactor flow_type)`;
@@ -844,6 +1115,31 @@ export function advanceImpl(changeName, opts) {
 
   // Auto-complete: terminal phase DONE → task completed
   if (nextPhase === 'complete') {
+    // #298 完成门禁：archive 未真实执行（无已闭合的 dispatch 记录）时拒绝完成，停在
+    // archive 原地并指引主会话按 DAG 派发 archive 阶段（next_action=dispatch），
+    // 避免"跳过 archive → 状态 done + 任务目录被搬走 → 无法补做"。
+    if (currentPhase === 'archive') {
+      const archiveGate = resolveArchiveCompletionGate(state);
+      if (!archiveGate.ok) {
+        // 复位本函数开头按 exit_status 乐观写入的 'done' —— 否则 pipeline-state.json 里
+        // archive 会同时显示 done 与"未完成"，正是 #298 报告的"状态与制品不一致"
+        if (state.pipeline[currentPhase]) {
+          state.pipeline[currentPhase].status = 'in_progress';
+        }
+        stateSave(changeName, state);
+        return {
+          change_name: changeName,
+          previous_phase: currentPhase,
+          current_phase: currentPhase,
+          next_action: 'dispatch',
+          next_role: getRole(rules, 'archive'),
+          next_rd_skill: getRdSkill(rules, 'archive'),
+          needs_pm: false,
+          reason: `archive completion refused: ${archiveGate.reason} — 必须先派发 archive 阶段（${getRdSkill(rules, 'archive')}）并通过 mark-dispatch --end 回写结果后才能完成（#298）`,
+          warnings: [`archive-gate (#298): ${archiveGate.reason}`],
+        };
+      }
+    }
     if (state.pipeline[currentPhase]) {
       state.pipeline[currentPhase].status = 'done';
       state.pipeline[currentPhase].exit_status = exit_status;
@@ -906,6 +1202,23 @@ export function advanceImpl(changeName, opts) {
     } else if (exit_status === 'DONE') {
       state.pipeline[currentPhase].first_pass = true;
     }
+  }
+
+  // #326 防御：路由表与 pipeline map 是两份独立定义，一旦脱节，无条件赋值会把
+  // current_phase 写到 pipeline 之外的阶段，后续 mark-dispatch 报 "No active phase"
+  // 且状态已落盘 —— 静默死路。这里显式升级 PM，让脱节可见可修（test-only /
+  // config-change 曾命中 debate）。虚拟阶段（'rework'）按设计就没有阶段体，放行。
+  if (!state.pipeline[nextPhase] && !VIRTUAL_ROUTE_PHASES.has(nextPhase)) {
+    stateSave(changeName, state);
+    return {
+      change_name: changeName,
+      previous_phase: currentPhase,
+      current_phase: currentPhase,
+      next_action: 'escalate_to_pm',
+      next_role: null, next_rd_skill: null, needs_pm: true,
+      reason: `transition target '${nextPhase}' not in pipeline of flow '${state.flow_type}'`,
+      warnings: [`transition/pipeline mismatch: ${currentPhase} → ${nextPhase} (flow '${state.flow_type}')`],
+    };
   }
 
   state.current_phase = nextPhase;

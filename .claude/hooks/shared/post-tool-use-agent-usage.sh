@@ -2,6 +2,8 @@
 # PostToolUse hook: 自动记录 Agent dispatch 的 usage
 # 触发条件: Task / Agent 工具执行完毕后
 # 输出: 调用 orchestrator.js record-usage 追加到 .harness/usage/usage.jsonl
+# token 归因（Issue #328）：默认走子 agent transcript（--subagent-from，见文件末尾说明）；
+#   仅当拿不到 started_at 时退回本文件维护的 transcript 水位线增量。
 # 注：不用 set -e，任何子命令失败也不应导致 hook 整体以非零退出。
 # hook runner 可能直接取进程退出码，|| true 在外层未必能拦截。
 set -uo pipefail
@@ -56,6 +58,8 @@ fi
 # !150: 旧实现用全局 .last-transcript-line，多项目共享时水位线被其他项目推到几万行之外，
 # 导致 extractTokenUsage 从超大 line 开始读 transcript（实际才几百行）→ 读不到 usage → tokens=null。
 # 修复：水位线文件名按 (project_slug, session_id) 隔离，跨项目/跨 session 互不污染。
+# Issue #328：水位线只服务「拿不到 started_at」的回退支路（无时间窗就无法按窗口归因子 agent），
+# 但仍须继续维护——回退支路靠它取 --from-line，per-session 隔离不变量也有回归测试守。
 USAGE_DIR="${HARNESS_USAGE_DIR:-$HOME/${HARNESS_ROOT:-}/usage}"
 USAGE_DIR="$(_expand_home "$USAGE_DIR")"
 
@@ -126,6 +130,18 @@ fi
 # --backend 显式 claude（P2-001：此 hook 只在 Claude 路径触发；
 #   codex dispatch 走 codex exec 子进程，不触发 PostToolUse:Agent。
 #   显式传 --backend claude 比 record-usage 内部从环境变量推断更准确）
+#
+# Issue #328 去重边界（main 桶 ∪ natural 桶 = 总用量，交集为空）：
+#   - natural 桶（本 hook）← 子 agent transcript：--subagent-from 透传 Agent 工具 started_at，
+#     record-usage 据此只读 <sessionId>/subagents/agent-*.jsonl（record-usage 侧实现）。
+#     不再取主会话 transcript 水位线增量——那批行会被 Stop hook 的 .main-offset 再记一次
+#     （实测 2× 重复），而子 agent 真实用量一条都进不来。
+#   - main 桶 ← 主会话 transcript 自 .main-offset 起的水位线增量（stop-main-session-usage.sh）。
+#   推论：本 hook **不得**推进 .main-offset —— 一旦推进，main 桶会跳过这批主会话行，
+#   而它已不再由 natural 桶记录，token 直接丢失。
+#   拿不到 started_at（duration_ms 与 PreToolUse 配对文件都缺）时保持旧行为（水位线增量），
+#   该支路无时间窗可用，subagents/ 无法按窗口归因。
+#
 # stdout 静默，stderr 写入错误日志便于排查（不超过 10KB，自动清理）
 # 确保 USAGE_DIR 存在：否则 2>>$_ERR_LOG 重定向会因父目录缺失而失败，错误被 || true 静默吞掉
 mkdir -p "$USAGE_DIR" 2>/dev/null || true
@@ -144,6 +160,7 @@ if [ -n "$STARTED_AT_FLAG" ]; then
         --backend "${HARNESS_BACKEND:-claude}" \
         --task "$TASK_DESC" \
         --started-at "$STARTED_AT" \
+        --subagent-from "$STARTED_AT" \
         --from-line "$FROM_LINE" \
         >/dev/null 2>>"$_ERR_LOG" || true
 else

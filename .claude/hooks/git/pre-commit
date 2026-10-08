@@ -189,6 +189,22 @@ if [ -n "$_HAS_TEST" ]; then
     exit 0
 fi
 
+# ── 测试目录被 .gitignore 忽略的策略性豁免（issue !309）──
+# WHY：仓库 ignore 规则（如 /src/test/）使测试永远进不了暂存区，本门禁必然死锁，
+# 每次提交只能走 GATE_BYPASS。区分「开发者漏写测试」与「本仓策略测试不入库」：
+# 工作区存在被忽略的测试路径（git check-ignore 复核）时降级为一行警告放行
+# （显式输出，非静默放行）；无被忽略测试路径时维持下方硬阻断。
+# 依赖目录（node_modules 等）内的 test 路径不算——那是第三方代码不是本仓策略。
+_IGNORED_TEST=$(git ls-files --others --directory --ignored --exclude-standard 2>/dev/null \
+    | grep -vE '(^|/)(node_modules|vendor|bower_components|third_party|thirdparty)(/|$)' \
+    | grep -E "$_TEST_RE" \
+    | head -1 \
+    || true)
+if [ -n "$_IGNORED_TEST" ] && git check-ignore -q -- "${_IGNORED_TEST%/}"; then
+    echo "[TDD] 警告：测试路径 ${_IGNORED_TEST%/} 被 .gitignore 忽略（本仓策略测试不入库），跳过 TDD 门禁（issue !309）。如非本仓策略，请修正 .gitignore 并 stage 测试"
+    exit 0
+fi
+
 _PC=$(echo "$_PROD" | wc -l | tr -d ' ')
 echo "[TDD] 检测到 ${_PC} 个生产代码变更，无对应测试"
 echo "$_PROD" | sed 's/^/  - /'

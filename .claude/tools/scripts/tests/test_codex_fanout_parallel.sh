@@ -73,7 +73,7 @@ console.log(JSON.stringify({
 EOF
 
 echo "=== Test (a) Promise.all 并行调 3 个 dispatchSubAgent ==="
-OUTPUT=$(PATH="$FAKE_CODEX_DIR:$PATH" CODEX_HOME="$HOME/.codex" HARNESS_FAKE_CODEX_MODE=success CLAUDE_PROJECT_DIR="$PROJECT_ROOT" node --input-type=module < "$RUNNER" 2>&1 | tail -15)
+OUTPUT=$(PATH="$FAKE_CODEX_DIR:$PATH" CODEX_HOME="$(mktemp -d "${TMPDIR:-/tmp}/codex-home-test.XXXXXX")" HARNESS_FAKE_CODEX_MODE=success CLAUDE_PROJECT_DIR="$PROJECT_ROOT" node --input-type=module < "$RUNNER" 2>&1 | tail -15)
 echo "$OUTPUT"
 
 COUNT=$(echo "$OUTPUT" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['parallel_count'])")

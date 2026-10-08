@@ -357,5 +357,7 @@ export function determineComplexity(changeName) {
     const match = content.match(/(?:complexity|复杂度)\s*[:：]\s*(S|M|L|XL)/i);
     if (match) return match[1].toUpperCase();
   }
-  return 'M'; // default: run design-review
+  // #313: 未声明复杂度时默认 'L'（必须评审）——原默认 'M' 属于"跳过"档，
+  // 导致未声明的 change 静默跳过 design-review。跳过仅限显式声明 S/M。
+  return 'L';
 }

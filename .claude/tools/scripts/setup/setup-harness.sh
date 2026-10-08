@@ -878,7 +878,7 @@ ensure_gitignore() {
   for _entry in ".gitlab-config" ".claude/" ".codex/" ".codebuddy/" ".qoder/" ".zcode/" ".framework-manifest" \
     ".harness/.harness-version" ".harness/.installed-backend" ".harness/.pending-upgrade-msg" \
     ".harness/.framework-edit" ".harness/.push-challenge" ".harness/.push-approved" \
-    ".harness/.setup-*.log" ".codegraph"; do
+    ".harness/.setup-*.log" ".codegraph" "/harness"; do
     if ! grep -qxF "$_entry" "$gitignore" 2>/dev/null; then
       echo "$_entry" >> "$gitignore"
       _added=$((_added + 1))
@@ -1117,10 +1117,22 @@ detect_language() {
 
   if [ -f "$target/.gitlab-ci.yml" ]; then
     if grep -q "public_group/rd_harness" "$target/.gitlab-ci.yml" 2>/dev/null; then
-      info ".gitlab-ci.yml 已引用 Uni-AURI 远程模板，跳过"
-      return 0
+      # "已引用远程模板" ≠ 产物是最新的：改名前的旧产物同样含 public_group/rd_harness，
+      # 但 before_script 缺 mkdir -p .claude/tools/（cp 到不存在的父目录 → pipeline 必挂，
+      # Issue !323）。仅凭"已引用"就 return 0，会让陈旧产物在升级时永远不被刷新，
+      # 且 --check/doctor 只校验框架文件、不校验该产物内容，故全绿无告警。
+      # 故加最小充分特征判定：含 mkdir 行才跳过，否则落到下方 --force 覆盖更新
+      # （覆盖前 setup-project.py 自动备份为 .gitlab-ci.yml.bak，用户定制内容不丢）。
+      # 特征串写死 .claude/tools/：生成器对所有 backend 恒输出该字面量（与 $backend_dir 无关），
+      # 换成 $backend_dir 会漏判非 claude 安装的陈旧产物。
+      if grep -qF 'mkdir -p .claude/tools/' "$target/.gitlab-ci.yml" 2>/dev/null; then
+        info ".gitlab-ci.yml 已引用 Uni-AURI 远程模板，跳过"
+        return 0
+      fi
+      warn ".gitlab-ci.yml 为旧版产物（before_script 缺 mkdir -p .claude/tools/），覆盖更新"
+    else
+      warn ".gitlab-ci.yml 未引用 harness 模板，覆盖更新"
     fi
-    warn ".gitlab-ci.yml 未引用 harness 模板，覆盖更新"
   fi
 
   info "生成 .gitlab-ci.yml ..."
@@ -1288,8 +1300,11 @@ do_check() {
   done
 
   # CLAUDE.md / AGENTS.md（非 claude 目标遍历所有已生成 backend，各自检查）
+  # 列表须与 install.sh 的 `--type all` GEN_TARGETS 保持一致：zcode/dsh 已从安装脚本
+  # 支持列表移除（暂），若此处仍期待 .zcode，会让每个新装项目 --check 报「.zcode 缺失」
+  # 这条恒假失败，掩盖真实问题。
   if [ "$skip_claude_check" -eq 1 ]; then
-    for _bd in .codex .codebuddy .qoder .zcode; do
+    for _bd in .codex .codebuddy .qoder; do
       if [ -f "$target/$_bd/reference/AGENTS.md" ]; then
         printf "  ${GREEN}✓${NC} AGENTS.md         %s 已就绪\n" "$_bd"
       else
@@ -1640,13 +1655,30 @@ run_batch_dispatch() {
 
     case "$raw" in
       /*) target="$raw" ;;
+      # Windows 盘符绝对路径（Issue !311）：D:/xxx、D:\xxx 不以 / 开头，
+      # 落入相对分支被拼成 $projects_dir/D:/xxx → 必然不存在 → 目标被静默误跳过
+      [A-Za-z]:/*|[A-Za-z]:\\*) target="$raw" ;;
       *)  target="$projects_dir/$raw" ;;
     esac
+
+    # Git Bash 原生识别盘符路径；WSL 等不识别的环境若有 cygpath，转换成 POSIX 路径再判定。
+    # 仅在初始判定失败时尝试（成功则 Git Bash 路径本就有效，无需转换）
+    if [ ! -d "$target" ] && command -v cygpath >/dev/null 2>&1; then
+      case "$raw" in
+        [A-Za-z]:*)
+          local posix_path
+          posix_path="$(cygpath -u "$raw" 2>/dev/null || true)"
+          [ -n "$posix_path" ] && [ -d "$posix_path" ] && target="$posix_path"
+          ;;
+      esac
+    fi
 
     total=$((total + 1))
 
     if [ ! -d "$target" ]; then
-      warn "跳过（路径不存在）：$raw"
+      # Issue !311：只打原始 $raw 时，盘符路径"看似合法"，看不出实际判定的是哪个路径；
+      # 补上解析后的 $target，让相对分支误拼接/转换失败一眼可见
+      warn "跳过（路径不存在）：${raw}（判定路径：${target}）"
       skipped=$((skipped + 1))
       continue
     fi

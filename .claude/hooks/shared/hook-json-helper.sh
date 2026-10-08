@@ -35,6 +35,26 @@ _jq_raw() {
     " 2>/dev/null || true
 }
 
+# ── 带超时的 stdin 读取（issue !308）──
+# Windows Git Bash 下宿主写完 hook JSON 后关闭 stdin 管道存在竞态，裸 cat 阻塞在
+# EOF 等待直至 hook 60s 超时。用 timeout 包装 cat 后：
+#   - 数据已到、EOF 延迟/不到：cat 先写后阻塞，超时截断时 stdout 已有完整 JSON → 正常返回（修复竞态本身）
+#   - 数据始终未到：超时后无任何数据 → 返回 1，由调用方 fail-open（stderr 提示一次 + exit 0）
+# macOS 无 GNU timeout 时退回裸 cat（该平台未观察到竞态，保持原行为）；
+# HOOK_STDIN_TIMEOUT=0 可显式关闭超时。
+# 用法（set -e 安全；失败必须走 || 分支 fail-open，不得让 guard 因此阻塞工具调用）：
+#   INPUT=$(hook_read_stdin) || { echo "[xx-guard] stdin 读取超时/失败，fail-open 放行（issue !308）" >&2; exit 0; }
+hook_read_stdin() {
+    local _in=""
+    if [ "${HOOK_STDIN_TIMEOUT:-5}" != "0" ] && command -v timeout >/dev/null 2>&1; then
+        _in=$(timeout "${HOOK_STDIN_TIMEOUT:-5}" cat 2>/dev/null) || true
+    else
+        _in=$(cat) || true
+    fi
+    [ -n "$_in" ] || return 1
+    printf '%s' "$_in"
+}
+
 # Output PreToolUse deny response (handles JSON escaping)
 # 退出码受 HOOK_DENY_EXIT 控制：
 #   - 默认 0（Claude Code 读 JSON 决策即可拦截）

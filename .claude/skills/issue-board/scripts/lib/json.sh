@@ -8,6 +8,12 @@
 # Missing-key semantics mirror jq's `.field // "default"`: only `null` falls
 # back to the default (empty string / "" / 0 are preserved as-is).
 
+# !261 补丁二的补漏：GBK 终端下裸 python3 -c 读 UTF-8 中文响应会误判非法 JSON
+# （http.sh _http_check_error 曾因此把 200+JSON 报成 "non-JSON response"）。
+# 与其在每个调用点逐个 reconfigure，不如全局强制 UTF-8 模式（Python 3.7+），
+# stdin/stdout/stderr 一律按 UTF-8 编解码，Linux CI 下为 no-op。
+export PYTHONUTF8=1
+
 # json_py <python_code>
 #   Generic entry. stdin = JSON document, code reads via sys.stdin.
 #   Use for transforms not covered by the sugar helpers below.

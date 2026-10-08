@@ -544,6 +544,21 @@
           "type": "object",
           "additionalProperties": { "type": "integer", "minimum": 0 },
           "description": "按阶段分布统计，key 为阶段名，value 为变更数"
+        },
+        "zero_rework_changes": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "变更一次通过率的分子：范围内 sum(rework_count.values()) === 0 的变更数（一次都没被打回）。分母为 total_changes（与 closed_loop 的闭环率同一集合、同一 --user 过滤）。缺 rework_count 的变更不计入本字段（宁可少算不虚高），但仍计入 total_changes。可选：老日报无此字段"
+        },
+        "total_rework_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "范围内所有变更 rework_count 各值之和（返工总次数）。数据源 pipeline-state.json 的 rework_count，口径同 total_changes。可选：老日报无此字段"
+        },
+        "rework_by_role": {
+          "type": "object",
+          "additionalProperties": { "type": "integer", "minimum": 0 },
+          "description": "返工次数按角色聚合（key 为角色名 architect/developer/tester/reviewer，value 为返工次数）；仅列出现过的角色。可选：老日报无此字段"
         }
       }
     },

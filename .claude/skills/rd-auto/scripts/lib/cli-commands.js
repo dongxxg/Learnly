@@ -17,8 +17,8 @@ import { formatDuration, computeStats, computeAdvancedStats } from './stats.js';
 import { parseTasksMd as parseTasksMdFn } from './fanout.js';
 import { assembleContextPack, expandAgentIncludes, recommendMode } from './context-pack.js';
 import { getBackendInfo } from './backend.js';
-import { filterConcernsByStatus, normalizeConcerns, resolveConcernById } from './concerns.js';
-import { extractCodexSubagentTokenUsage } from './codex-rollout.js';
+import { filterConcernsByStatus, normalizeConcerns, resolveConcernById, mergeConcerns, collectConcernLists } from './concerns.js';
+import { extractCodexSubagentTokenUsage, extractCodexRolloutTokenUsage } from './codex-rollout.js';
 
 // ─── Transcript Token Extraction ───
 
@@ -200,14 +200,22 @@ export function extractSubagentTokenUsage(mainTranscriptPath, startedAt) {
   }
 }
 
-// ─── ZCode model-io Token Extraction (issues #277/#282) ───
+// ─── ZCode model-io Token Extraction (issues #277/#282/#290) ───
 //
 // ZCode 本地逐次调用日志：~/.zcode/cli/rollout/model-io-sess_<sessionId>.jsonl，每行一次
 // 模型调用（camelCase schema，2026-09-08 本机实测）：
 //   { startedAt, completedAt, model:{modelId, role, ...}, response:{usage:{
-//     inputTokens, outputTokens, totalTokens, cacheReadTokens, cacheWriteTokens }},
+//     inputTokens, outputTokens, totalTokens, cacheReadTokens, cacheWriteTokens}},
 //     sessionId, querySource, ... }
 // request 字段含完整请求体（数百 KB/行），解析后只取 usage/model/时间戳，request 即刻丢弃。
+//
+// Issue #290：camelCase response.usage.inputTokens 实测已含 cache 读（样例
+// inputTokens 37133 = snake input_tokens 9485 + cacheReadTokens 27648）。净 input 来源：
+//   ① response.providerMetadata.anthropic.usage（snake_case 原始 API 字段，input_tokens
+//      不含 cache——issue 实测校准口径）
+//   ② camelCase usage 兜底：inputTokens 扣除 cacheReadTokens（实证只覆盖 cacheRead），
+//      max(0) 钳制防负
+// total_tokens 保持 CLI 官报 usage.totalTokens（gross 口径，与 codex 官报 total 同语义）。
 //
 // subagent 布局两种并存，归因一律看记录级字段、不能只认文件名：
 //   - 独立文件：model-io-sess_subagent_agent_<uuid>.jsonl（querySource:"subagent"）
@@ -228,13 +236,31 @@ export function parseZcodeModelIoRecord(line) {
   // 缺 completedAt 按起点时刻的点事件处理（时间窗重叠判定仍可用）
   const completedRaw = obj.completedAt != null ? Date.parse(obj.completedAt) : NaN;
   const completedMs = Number.isNaN(completedRaw) ? startedMs : completedRaw;
+  const num = (v) => (typeof v === 'number' ? v : 0);
+  const pmUsage = obj.response.providerMetadata
+    && obj.response.providerMetadata.anthropic
+    && obj.response.providerMetadata.anthropic.usage;
+  let inputTokens; let outputTokens; let cacheRead; let cacheWrite;
+  if (pmUsage && typeof pmUsage === 'object' && typeof pmUsage.input_tokens === 'number') {
+    // snake 原始 API 字段：input_tokens 本身不含 cache 读，直接采用
+    inputTokens = num(pmUsage.input_tokens);
+    outputTokens = num(pmUsage.output_tokens);
+    cacheRead = num(pmUsage.cache_read_input_tokens);
+    cacheWrite = num(pmUsage.cache_creation_input_tokens);
+  } else {
+    // camel 兜底：inputTokens 已含 cache 读，扣除 cacheReadTokens 得净 input
+    outputTokens = num(usage.outputTokens);
+    cacheRead = num(usage.cacheReadTokens);
+    cacheWrite = num(usage.cacheWriteTokens);
+    inputTokens = Math.max(0, num(usage.inputTokens) - cacheRead);
+  }
   return {
     started_at_ms: startedMs,
     completed_at_ms: completedMs,
-    input_tokens: typeof usage.inputTokens === 'number' ? usage.inputTokens : 0,
-    output_tokens: typeof usage.outputTokens === 'number' ? usage.outputTokens : 0,
-    cache_read_input_tokens: typeof usage.cacheReadTokens === 'number' ? usage.cacheReadTokens : 0,
-    cache_creation_input_tokens: typeof usage.cacheWriteTokens === 'number' ? usage.cacheWriteTokens : 0,
+    input_tokens: inputTokens,
+    output_tokens: outputTokens,
+    cache_read_input_tokens: cacheRead,
+    cache_creation_input_tokens: cacheWrite,
     total_tokens: typeof usage.totalTokens === 'number' ? usage.totalTokens : 0,
     model: (obj.model && typeof obj.model.modelId === 'string') ? obj.model.modelId : null,
     // 归因隔离信号：querySource 与 model.role 任一标记 subagent 即算（两种布局并存，不能只认一个）
@@ -583,14 +609,22 @@ export function cmdMarkDispatch(args) {
       if (!hasExplicitTokenArgs && lastOpen && lastOpen.started_at) {
         tokenUsage = extractCodexSubagentTokenUsage(lastOpen.started_at, now);
       }
-    } else if (lastOpen && lastOpen._transcript_line != null && transcriptPath) {
-      tokenUsage = extractTokenUsage(transcriptPath, lastOpen._transcript_line);
+    } else if (lastOpen && transcriptPath) {
+      // Issue #327 缺陷②：claude/codebuddy 分支调换取数优先级——先聚合子 agent，再回落主会话增量。
+      // 为什么：--start 之后主会话 transcript 只要写了任何带 usage 的行（Claude Code 流式会把同一条
+      // 消息连写多次），旧的「先 extractTokenUsage」顺序就返回非 null，把主会话自己的用量记成
+      // dispatch 用量（与 Stop hook 的 main 桶实测 2× 重复），子 agent 真实用量反而被跳过。
+      // 为何不会把「主会话直出」误记成子 agent：extractSubagentTokenUsage 只读
+      // <sessionId>/subagents/agent-*.jsonl，数据源与主会话 transcript 完全隔离——目录缺失、
+      // 或候选文件全部被 mtime 过滤时必然返回 null，此时仍走下面的主会话增量分支。
+      tokenUsage = extractSubagentTokenUsage(transcriptPath, lastOpen.started_at);
+      if (!tokenUsage && lastOpen._transcript_line != null) {
+        tokenUsage = extractTokenUsage(transcriptPath, lastOpen._transcript_line);
+      }
     }
-    // Issue !193: 主会话 transcript 拿不到子 agent token，fallback 扫 subagents 目录
-    // Claude backend pipeline dispatch 的子 agent token 在独立 transcript：
-    // projects/<slug>/<sessionId>/subagents/agent-*.jsonl
-    // （zcode 无此布局，backend==='zcode' 时跳过）
-    if (!tokenUsage && backend !== 'zcode' && lastOpen && transcriptPath) {
+    // Issue !193 兜底：codex 窗口归集无果时，若存在 claude transcript 布局仍扫 subagents/
+    // （claude/codebuddy 已在上面的分支里优先取过，此处不重复；zcode 无此布局）
+    if (!tokenUsage && backend === 'codex' && lastOpen && transcriptPath) {
       tokenUsage = extractSubagentTokenUsage(transcriptPath, lastOpen.started_at);
     }
     if (!tokenUsage && hasExplicitTokenArgs) {
@@ -617,14 +651,14 @@ export function cmdMarkDispatch(args) {
       }
     }
 
-    // 把 backend 字段写入 token_usage（若 tokenUsage 为 null 但 backend 有值，仍创建 {backend} 对象）
-    if (backend) {
-      if (tokenUsage) {
-        tokenUsage.backend = backend;
-      } else {
-        tokenUsage = { backend };
-      }
-    }
+    // Issue #327 缺陷①：token 提取全空时只落 token_usage: null，不再因 --backend 有值就造出
+    // {backend:"claude"} 残缺对象。判定口径对齐 collect-ai.js 的 normalizeTokenUsage：只有
+    // input/output/cache_read/cache_creation/total 至少一个非 null 才算有效记录，残缺对象
+    // 会被下游当成「有用量数据」处理（token_summary 全 0），掩盖真实的采样缺口。
+    // 选择「落 null」而非「保留 backend + 让下游识别为无效」的理由：stats.js 对 null 直接
+    // 跳过，而残缺对象会凭空多出一个全 null 的 by_backend 桶；backend 归因只对确有用量的
+    // dispatch 才有意义。
+    if (backend && tokenUsage) tokenUsage.backend = backend;
 
     // 透传 dispatch 模板 / wrapper 传回的结果字段（issue !168：此前静默忽略
     // exit_status/summary/score，致 advance code-review 误判 rework）。
@@ -635,10 +669,21 @@ export function cmdMarkDispatch(args) {
     if (parsed.score !== undefined) resultFields.score = parsed.score !== '' ? Number(parsed.score) : null;
     if (parsed['p0-count'] !== undefined) resultFields.p0_count = Number(parsed['p0-count']) || 0;
     if (parsed['p1-count'] !== undefined) resultFields.p1_count = Number(parsed['p1-count']) || 0;
+    // #314: design-review verdict 通道——枚举校验后写 dispatch_history 末条 +
+    // pipeline[phase].verdict（advance resolveDesignVerdict 的兜底层 ②）
+    if (parsed.verdict !== undefined) {
+      if (parsed.verdict !== 'APPROVED' && parsed.verdict !== 'REWORK_NEEDED') {
+        errExit(`Invalid --verdict '${parsed.verdict}'. Use APPROVED or REWORK_NEEDED`);
+      }
+      resultFields.verdict = parsed.verdict;
+    }
 
     if (lastOpen) {
       lastOpen.completed_at = now;
-      if (tokenUsage) lastOpen.token_usage = tokenUsage;
+      // Issue #327 缺陷①：无条件赋值（含 null）——「本轮无用量」要显式落 null，
+      // 不能依赖 --start 是否写过该字段（否则手工构造/旧 state 里会残留 undefined，
+      // 与 push 分支的 token_usage: tokenUsage 行为也不对称）
+      lastOpen.token_usage = tokenUsage;
       Object.assign(lastOpen, resultFields);
       delete lastOpen._transcript_line;
     } else {
@@ -650,7 +695,11 @@ export function cmdMarkDispatch(args) {
         score: resultFields.score ?? null,
         p0_count: resultFields.p0_count ?? 0,
         p1_count: resultFields.p1_count ?? 0,
+        verdict: resultFields.verdict ?? null,
       });
+    }
+    if (resultFields.verdict !== undefined) {
+      ph.verdict = resultFields.verdict;
     }
     ph.dispatch_completed_at = now;
 
@@ -685,7 +734,7 @@ export function cmdRecordUsage(args) {
   const fromLine = (parsed['from-line'] !== undefined && parsed['from-line'] !== 'true') ? parseInt(parsed['from-line'], 10) : null;
   const safeFromLine = (fromLine !== null && !isNaN(fromLine)) ? fromLine : null;
 
-  if (!role) errExit('Usage: orchestrator.js record-usage --role <role> [--trigger natural|pipeline] [--task "..."] [--started-at ISO] [--completed-at ISO] [--from-line N] [--backend claude|codex|codebuddy|qoder|zcode] [--tokens N]');
+  if (!role) errExit('Usage: orchestrator.js record-usage --role <role> [--trigger natural|pipeline] [--task "..."] [--started-at ISO] [--completed-at ISO] [--from-line N] [--subagent-from ISO] [--backend claude|codex|codebuddy|qoder|zcode] [--tokens N] [--rollout-file <path>]');
 
   // Backend 维度（区分 claude/codex，便于报表不求和 token）
   const backend = (parsed.backend || _detectBackendTypeForUsage()).toLowerCase();
@@ -730,6 +779,40 @@ export function cmdRecordUsage(args) {
     const cliTokens = parsed.tokens != null ? parseInt(parsed.tokens, 10) : null;
     if (cliTokens != null && !Number.isNaN(cliTokens) && cliTokens > 0) {
       tokens = { total: cliTokens };
+    } else if (backend === 'codex' && parsed['rollout-file']) {
+      // Issue #288：codex 主会话 Stop 直采——Stop hook 定位主会话 rollout 文件并传
+      // 行偏移（与 claude track 的 transcript 水位线同机制），按行偏移窗口增量提取。
+      // 优先级：显式 --tokens > 主会话 rollout 直采 > subagent 时间窗归集。
+      // tokens 口径与 codex subagent 记录一致（input 为 gross、含 cached，cache_read 分列）。
+      const rolloutPath = parsed['rollout-file'];
+      if (!existsSync(rolloutPath)) {
+        note = 'codex rollout file not found';
+      } else {
+        const totalLines = countTranscriptLines(rolloutPath);
+        // 与 claude track 同语义：自 fromLine 起无新增行 → 不产生记录（防空记录虚增）
+        if (totalLines <= (safeFromLine !== null ? safeFromLine : 0)) {
+          output({ action: 'record_usage', role, trigger, skipped: 'no_new_rollout_lines' });
+          return;
+        }
+        const extracted = extractCodexRolloutTokenUsage(rolloutPath, safeFromLine !== null ? safeFromLine : 0);
+        if (extracted) {
+          tokens = {
+            input: extracted.input_tokens,
+            output: extracted.output_tokens,
+            cache_read: extracted.cache_read_input_tokens,
+            cache_creation: extracted.cache_creation_input_tokens,
+            model: extracted.model,
+          };
+        } else {
+          note = 'codex rollout window had no parseable token usage';
+        }
+        // 偏移推进与 claude track 同规则：即使本轮无用量也推进（该批行确无 token 事件）
+        const offsetFile = parsed['advance-offset-file'];
+        if (offsetFile) {
+          try { writeFileSync(offsetFile, String(totalLines), 'utf8'); }
+          catch (e) { debugLog('advance-offset-file write failed —', e.message); }
+        }
+      }
     } else if (backend === 'codex' && startedAt) {
       // Issue !271 根因1：codex 无 --tokens 时按窗口归集 subagent rollout 用量
       // （三级优先与 zcode 分支对齐：显式透传 > 窗口归集 > note）。
@@ -747,6 +830,36 @@ export function cmdRecordUsage(args) {
       }
     } else {
       note = `${backend} dispatch produced no parseable token usage`;
+    }
+  } else if (parsed['subagent-from'] !== undefined && parsed['subagent-from'] !== 'true') {
+    // Issue #328：natural dispatch（Agent/Task 工具调用）的 token 归因改采**子 agent transcript**
+    // （projects/<slug>/<sessionId>/subagents/agent-*.jsonl），窗口起点由调用方给出
+    // （PostToolUse hook 用 Agent 工具 duration_ms 反算的 --started-at 透传）。
+    //
+    // 为什么不再用主会话 transcript 水位线增量：dispatch 期间主会话自己也会写 usage，
+    // 同一批行随后又被 Stop hook 的 .main-offset 记进 main 桶 → 实测 main+natural ≈ 2× 重复，
+    // 而子 agent 真实用量一条都进不来（natural 记录 duration_ms 仅 46~53ms，显然不是子 agent 生命周期）。
+    //
+    // 去重边界（main 桶 ∪ natural 桶 = 总用量，交集为空）：
+    //   - natural 桶 ← subagents/agent-*.jsonl（**只读**该目录，与主会话 transcript 数据源互斥）
+    //   - main 桶   ← 主会话 transcript 自 .main-offset 起的水位线增量（stop-main-session-usage.sh）
+    // 因此本分支禁止回落主会话增量——一旦回落就恢复双计。取不到时落 tokens:null（诚实记采样缺口）。
+    const transcriptPath = findTranscriptPath();
+    if (!transcriptPath) {
+      note = 'transcript not found — subagent token extraction skipped';
+    } else {
+      const extracted = extractSubagentTokenUsage(transcriptPath, parsed['subagent-from']);
+      if (extracted) {
+        tokens = {
+          input: extracted.input_tokens,
+          output: extracted.output_tokens,
+          cache_read: extracted.cache_read_input_tokens,
+          cache_creation: extracted.cache_creation_input_tokens,
+          model: extracted.model,
+        };
+      } else {
+        note = 'no subagent transcript usage in window';
+      }
     }
   } else if (safeFromLine !== null) {
     const transcriptPath = findTranscriptPath();
@@ -819,15 +932,26 @@ function _detectBackendTypeForUsage() {
 
 export function cmdAdvance(args) {
   const changeName = args[0];
-  if (!changeName) errExit('Usage: orchestrator.js advance <change-name> [--exit-status DONE] [--score 85] [--artifacts f1,f2] [--work-item-id WI-1] [--worktree-path /path] [--rework-reason "..."]');
+  if (!changeName) errExit('Usage: orchestrator.js advance <change-name> [--exit-status DONE] [--score 85] [--verdict APPROVED] [--artifacts f1,f2] [--work-item-id WI-1] [--worktree-path /path] [--rework-reason "..."]');
 
   // Phase 3a 防御校验：当前 phase 的 dispatch_history 末尾条目必须含 wrapper_invoked:true
   // 由 dispatch-agent.js wrapper 写入；缺失意味着主会话绕过 wrapper 直接调 Agent
   _assertWrapperInvoked(changeName);
 
   const parsed = parseArgs(args.slice(1));
+  // #312: 不再默认 'DONE' —— 缺省时由 advanceImpl 的 resolveAdvanceExitStatus 桥接
+  // （显式传参 > dispatch_history 末条 > DONE）。parseArgs 对无值旗标（--exit-status）
+  // 返回字面 'true' 字符串，与空串一并过滤，否则会把桥接短路成显式 'true'。
+  const exitStatusArg = parsed['exit-status'];
+  const explicitExitStatus = (exitStatusArg !== undefined && exitStatusArg !== 'true' && exitStatusArg !== '')
+    ? exitStatusArg
+    : undefined;
+  // #314: design-review verdict 显式传参（枚举校验；非法值在 CLI 边界报错）
+  if (parsed.verdict !== undefined && parsed.verdict !== 'APPROVED' && parsed.verdict !== 'REWORK_NEEDED') {
+    errExit(`Invalid --verdict '${parsed.verdict}'. Use APPROVED or REWORK_NEEDED`);
+  }
   const result = advance(changeName, {
-    exit_status: parsed['exit-status'] || 'DONE',
+    exit_status: explicitExitStatus,
     score: parsed.score !== undefined ? parseFloat(parsed.score) : undefined,
     p0_count: parsed['p0-count'] !== undefined ? parseInt(parsed['p0-count'], 10) : undefined,
     p1_count: parsed['p1-count'] !== undefined ? parseInt(parsed['p1-count'], 10) : undefined,
@@ -837,6 +961,7 @@ export function cmdAdvance(args) {
     rework_reason: parsed['rework-reason'] || '',
     work_item_id: parsed['work-item-id'] || '',
     worktree_path: parsed['worktree-path'] || '',
+    verdict: parsed.verdict,
   });
   // checkpoint 自动落盘：跨 session resume 时无需重跑 advance 推断
   writeCheckpoint(changeName, result);
@@ -875,9 +1000,16 @@ export function cmdRunAutomated(args, _depth) {
     if (dupes.length > 0) {
       concerns.push(`duplicate active task: ${dupes.map(t => t.change_name).join(', ')}`);
     }
+    // Issue #329 缺陷1：原先「.harness/spec/changes/<name> 已存在」被判为 concern 并据此
+    // 置 NEEDS_CONTEXT，是**范畴错误** —— 它既非上下文缺失（NEEDS_CONTEXT 会触发上下文
+    // 升档，本阶段 context_mode 已是 full 时无法升档，直接 escalate_to_pm），用户对此也
+    // 无补救动作。而该目录由 `rd new change` 创建，是 rd-propose SKILL.md:52-54 强制要求的
+    // 第一步；CI 侧 architect.py 同样把「目录已存在」当正常复用处理。故「/rd-propose →
+    // /rd-auto」这条官方衔接路径必然误触发、被硬阻断，只能用 set-phase 绕行。
+    // 现改为仅留可观测痕迹（debugLog），不参与 verdict。
     const changeDir = join(PROJECT_ROOT, '.harness', 'spec', 'changes', changeName);
     if (existsSync(changeDir)) {
-      concerns.push(`change directory already exists: ${changeDir}`);
+      debugLog(`intake: change directory already exists, reusing as-is: ${changeDir}`);
     }
 
     if (concerns.length === 0) {
@@ -1642,10 +1774,12 @@ export function cmdWriteSharedState(args) {
   const changeName = args[0];
   const key = getArg(args, '--key');
   const jsonData = getArg(args, '--json');
+  const merge = args.includes('--merge');
 
-  if (!changeName) errExit('Usage: orchestrator.js write-shared-state <change-name> --key <key> --json <json-data>');
+  if (!changeName) errExit('Usage: orchestrator.js write-shared-state <change-name> --key <key> --json <json-data> [--merge]');
   if (!key) errExit('--key is required');
   if (!jsonData) errExit('--json is required');
+  if (merge && key !== 'concerns') errExit('--merge 仅支持 --key concerns（其余 key 无按 id 合并语义）');
 
   const stateDir = getSharedStateDirFn(changeName);
   if (!existsSync(stateDir)) mkdirSync(stateDir, { recursive: true });
@@ -1661,8 +1795,38 @@ export function cmdWriteSharedState(args) {
   // 写入时必须归一化到规范分组 {p0,p1} 并校验每条必填字段，防止 AI 自由发挥
   // 输出裸数组/包裹/分组等任意格式（issue: resolve-concern 无法处理非规范格式）。
   if (key === 'concerns') {
+    // 既有文件仅在 --merge（合并源）与覆盖告警（条目数对比）时读取：
+    // merge 路径解析失败 fail-closed（无源可合）；覆盖路径解析失败跳过告警、
+    // 行为与历史版本完全一致（向后兼容，不因坏文件阻止覆盖）。
+    let existing = null;
+    const concernsPath = join(stateDir, 'concerns.json');
+    if (existsSync(concernsPath)) {
+      try {
+        existing = JSON.parse(readFileSync(concernsPath, 'utf8'));
+      } catch (e) {
+        if (merge) errExit(`--merge 需要读取既有 concerns.json，解析失败: ${e.message}`);
+        existing = null;
+      }
+    }
     try {
-      data = normalizeConcerns(data);
+      if (merge) {
+        // --merge（issue !296）：按 id 合并进既有条目——同 id 以新为准，
+        // 未冲突历史条目原样保留；incoming 仍过 normalizeConcerns 写入门禁。
+        data = mergeConcerns(existing, data);
+      } else {
+        data = normalizeConcerns(data);
+        // 覆盖告警（issue !296）：默认整体覆盖保持向后兼容，但条目数下降
+        // 大概率是"只重发了增量"误用覆盖语义——会静默抹掉历史条目
+        // （concern_stats 失真、advance P0 判定失据），必须显式提示。
+        if (existing) {
+          const countEntries = (c) => collectConcernLists(c).reduce((n, l) => n + l.length, 0);
+          const oldCount = countEntries(existing);
+          const newCount = countEntries(data);
+          if (newCount < oldCount) {
+            console.error(`[write-shared-state] 警告: concerns 覆盖写入条目数下降（${oldCount} → ${newCount}），未随请求重发的历史条目将被删除；追加/合并请使用 --merge`);
+          }
+        }
+      }
     } catch (e) {
       errExit(`concerns.json 校验失败: ${e.message}`);
     }

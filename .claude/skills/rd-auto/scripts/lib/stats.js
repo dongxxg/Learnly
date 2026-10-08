@@ -197,11 +197,14 @@ export function recalcTokens(state) {
 
       // ── by_backend / by_role_backend 聚合（新） ──
       // backend 兜底：缺失 → 'claude'（向前兼容旧 state）；未知值 → 'unknown' + 告警
+      // 注意：白名单必须与实际支持的 backend 全集一致（backend-factory 的 detectBackend/
+      // createBackend 可产出 claude/codex/codebuddy/qoder/zcode/dsh），漏一个就会把该
+      // backend 的 dispatch 误并进 'unknown' 桶并刷出假告警（#322：dsh 曾被漏掉）。
       let backend = tu.backend;
       if (!backend) {
         backend = 'claude';
         summary.backend_fallback_count++;
-      } else if (!['claude', 'codex', 'codebuddy', 'qoder', 'zcode'].includes(backend)) {
+      } else if (!['claude', 'codex', 'codebuddy', 'qoder', 'zcode', 'dsh'].includes(backend)) {
         _warnUnknown(backend);
         backend = 'unknown';
       }

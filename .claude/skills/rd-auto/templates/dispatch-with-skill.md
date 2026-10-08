@@ -82,4 +82,8 @@ CodexBackend._parseOutput 只信任 JSON 尾块。
    - archive 阶段遇到同步方式选择 → 选"立即同步"
 5. **禁止**重复 Read {agent_path}，角色定义已在 `<agent_definition>` 提供
 6. 上下文不足时返回 exit_status=NEEDS_CONTEXT（主会话会升级 context_mode 重 dispatch，最多 2 次）
+7. **禁止嵌套派发**：不得用 Agent/Task 工具（或任何 backend 的 headless dispatch）派发其他角色
+   （Tester / Reviewer / Architect / Developer / Debate），也不得在结果中给出其他角色的结论或
+   自评分——阶段推进由主会话按 DAG 派发，嵌套派发没有 `dispatch_history` 记录、不参与制品门禁 /
+   P0 否决 / 评分路由；需其他角色介入请返回 exit_status=NEEDS_PM
 </rules>

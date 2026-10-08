@@ -7,6 +7,7 @@
 //     artifacts?: string[],
 //     score?: number,
 //     p0_count?: number,
+//     verdict?: string,         // 仅 design-review：APPROVED | REWORK_NEEDED（#314）
 //     concerns?: Array,
 //     escalate_reason?: string,   // 仅 BLOCKED 时
 //     raw?: object                // 调试用：原始返回（不写 pipeline-state）
@@ -53,6 +54,7 @@ function _normalizeClaude(raw) {
   if (raw.artifacts != null) result.artifacts = raw.artifacts;
   if (raw.score != null) result.score = raw.score;
   if (raw.p0_count != null) result.p0_count = raw.p0_count;
+  if (raw.verdict != null) result.verdict = raw.verdict; // #314 design-review verdict 透传
   if (Array.isArray(raw.concerns)) result.concerns = raw.concerns;
   return result;
 }
@@ -80,6 +82,7 @@ function _normalizeHeadless(raw, backendType) {
   if (raw.artifacts != null) result.artifacts = raw.artifacts;
   if (raw.score != null) result.score = raw.score;
   if (raw.p0_count != null) result.p0_count = raw.p0_count;
+  if (raw.verdict != null) result.verdict = raw.verdict; // #314 design-review verdict 透传
   if (Array.isArray(raw.concerns)) result.concerns = raw.concerns;
 
   return result;

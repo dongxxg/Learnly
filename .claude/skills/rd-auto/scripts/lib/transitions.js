@@ -122,6 +122,12 @@ export function buildReworkResponse(changeName, currentPhase, rework, reason, st
       dispatch_history: [],
     };
   }
+  // #315 返工回流：记录本次返工的来源 phase，返工完成（advance REWORK_TARGET_ROLES
+  // 分支）后回到来源复审。放 pipeline[target] 而非 pending_rework —— pending_rework
+  // 在 dispatch-agent mark-start 时即被清除（issue !232 C4.2），而回流判定发生在
+  // 返工 dispatch 完成之后，彼时已读不到；pipeline[target] 与返工 phase 同生命周期
+  // 且不被清除（多轮返工 append，消费方取末位 origin）。
+  state.pipeline[target].rework_origins = [...(state.pipeline[target].rework_origins || []), currentPhase];
   stateSave(changeName, state);
 
   return {

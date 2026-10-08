@@ -200,6 +200,66 @@ setup_mock
 }
 teardown_mock
 
+# ─── http_get_all large pages (env/argv overflow regression) ───
+# 回归：合并累加器时曾把整页/全量 JSON 经环境变量传给 python3。单个 env/argv
+# 字符串上限 MAX_ARG_STRLEN=128KiB，超限后 execve 失败（"Argument list too
+# long"），python 收到空串 → JSONDecodeError。48 项 issue 的全量 JSON 即触发。
+echo "  http_get_all large pages (128KiB env limit regression):"
+setup_mock
+{
+  mk_page() {  # $1=起始 iid $2=条数 $3=输出文件
+    OUT="$3" START="$1" COUNT="$2" python3 -c '
+import json, os
+items = [{"iid": int(os.environ["START"]) + i, "body": "x" * 4000}
+         for i in range(int(os.environ["COUNT"]))]
+open(os.environ["OUT"], "w", encoding="utf-8").write(json.dumps(items))
+'
+  }
+  BIG1="$(mktemp)"; mk_page 1 50 "${BIG1}"    # ~200KiB，单页即超 128KiB 上限
+  BIG2="$(mktemp)"; mk_page 51 50 "${BIG2}"   # 第二页使累加器增至 ~400KiB
+
+  HDR_NEXT_BIG="$(mktemp)"
+  {
+    printf 'HTTP/1.1 200 OK\r\n'
+    printf 'X-Next-Page: 2\r\n'
+  } >"${HDR_NEXT_BIG}"
+  HDR_LAST_BIG="$(mktemp)"
+  {
+    printf 'HTTP/1.1 200 OK\r\n'
+    printf 'X-Next-Page:\r\n'
+  } >"${HDR_LAST_BIG}"
+
+  big_pages() {
+    local args="$1"
+    if [[ "${args}" == *"page=2"* ]]; then
+      cp "${HDR_LAST_BIG}" "${MOCK_CURL_HEADERS_OUT}"
+      cat "${BIG2}"
+    else
+      cp "${HDR_NEXT_BIG}" "${MOCK_CURL_HEADERS_OUT}"
+      cat "${BIG1}"
+    fi
+  }
+  export -f big_pages
+  export HDR_NEXT_BIG HDR_LAST_BIG BIG1 BIG2
+  export MOCK_CURL_RESPONSE_FN=big_pages
+
+  out=$(http_get_all "/projects/1/issues?per_page=100" 2>/tmp/ib_big_err_$$); rc=$?
+  assert_eq "${rc}" "0" "large multi-page returns 0"
+  total=$(printf '%s' "${out}" | json_len)
+  assert_eq "${total}" "100" "100 items merged across 2 large pages"
+  # 载荷内容仍需完整（防止只校验长度而掩盖截断）。
+  first_body_len=$(printf '%s' "${out}" | json_py '
+import sys, json
+d = json.load(sys.stdin)
+print(len(d[0]["body"]) if d else -1)
+')
+  assert_eq "${first_body_len}" "4000" "item payload preserved intact"
+  assert_not_contains "$(cat /tmp/ib_big_err_$$ 2>/dev/null)" "Argument list too long" \
+    "no env/argv overflow"
+  rm -f "${BIG1}" "${BIG2}" "${HDR_NEXT_BIG}" "${HDR_LAST_BIG}" /tmp/ib_big_err_$$
+}
+teardown_mock
+
 # ─── http_put body forwarding ───
 echo "  http_put forwards body:"
 setup_mock
@@ -211,7 +271,10 @@ setup_mock
   assert_eq "${rc}" "0" "http_put returns 0"
   call=$(head -1 "${MOCK_CURL_CALL_LOG}")
   assert_contains "${call}" '-X PUT' "PUT method used"
-  assert_contains "${call}" '--data {"state_event":"close"}' "PUT body forwarded"
+  # payload 经临时文件 + --data-binary 投递（argv 传中文会被 Git-Bash 按 GBK
+  # 转码损坏，见 http.sh _http_request 的 !261 注释），不再内联 --data。
+  assert_contains "${call}" '--data-binary @' "PUT body forwarded via file"
+  assert_not_contains "${call}" '"state_event":"close"' "PUT payload not inline in argv"
   assert_contains "${call}" "Content-Type: application/json" "Content-Type set"
   rm -f "${BODY_FILE}"
 }
@@ -228,7 +291,9 @@ setup_mock
   assert_eq "${rc}" "0" "http_post returns 0"
   call=$(head -1 "${MOCK_CURL_CALL_LOG}")
   assert_contains "${call}" '-X POST' "POST method used"
-  assert_contains "${call}" '--data {"body":"hi"}' "POST body forwarded"
+  # 同上：payload 走文件投递，不进 argv。
+  assert_contains "${call}" '--data-binary @' "POST body forwarded via file"
+  assert_not_contains "${call}" '"body":"hi"' "POST payload not inline in argv"
   rm -f "${BODY_FILE}"
 }
 teardown_mock

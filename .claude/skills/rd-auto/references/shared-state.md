@@ -41,7 +41,9 @@
       "line": "WI-3",
       "raised_by": "developer",
       "author": "wangzk",
-      "created_at": "2026-06-14T..."
+      "created_at": "2026-06-14T...",
+      "resolution": "修复说明（status=resolved 时的关闭证据，写盘保留）",
+      "dimension": "评审维度（如 自洽性，用于复盘归因，写盘保留）"
     }
   ],
   "p2": [
@@ -88,13 +90,18 @@ advance 路由判据统一是 **open P0 数量**（`status !== 'resolved'` 的 P
 # 读取（filter by key/status）
 node $SCRIPT read-shared-state <change> --key concerns --status open
 
-# 写入
+# 写入（默认整体覆盖；覆盖后条目数下降时 stderr 显式告警）
 node $SCRIPT write-shared-state <change> --key concerns --json '<JSON>'
+
+# 追加/按 id 合并（保留未冲突历史条目，同 id 以新为准）
+node $SCRIPT write-shared-state <change> --key concerns --merge --json '<增量 JSON>'
 
 # 标记单条 concern 解决
 node $SCRIPT resolve-concern <change> --concern-id C001
 ```
 
+> **覆盖语义与 `--merge`（issue !296）**：`write-shared-state --key concerns` 默认**整体覆盖**——只重发增量会抹掉历史条目（覆盖后条目数下降时 stderr 会显式告警）。追加单条/合并用 `--merge`：按 `id` 合并进既有文件（同 id 以新条目为准并按其 severity 重新归组，未冲突历史条目原样保留），新数据仍过 `normalizeConcerns` 写入门禁；既有数据按读侧容忍原则不重校验。`--merge` 仅支持 `--key concerns`。
+>
 > **resolve 时机（必须）**：Developer/Reviewer 修复某条 concern 对应的问题后，**必须**调用 `resolve-concern <change> --concern-id <id>` 将其标记 `resolved`——否则该问题仍计入 open：会误触发 advance 的 P0 否决（`countOpenP0FromConcerns` 按 `status !== 'resolved'` 计数），且 daily-report 的 concern_stats 会把已修复问题统计为仍未决（失真）。
 >
 > **写入强制归一化**：`write-shared-state --key concerns` 将 AI 传入的任意格式（裸数组 / 包裹 `{concerns}` / 分组 `{p0,p1,p2}`）**归一化为规范分组 `{p0,p1,p2}`**，并校验每条必填字段（`id` / `severity`(P0|P1|P2) / `author`(问题责任人) / `status`(open|resolved|deferred|dismissed) / `description`），非法输入或**缺 author 直接拒绝**——AI 无法再自由输出不符合要求的格式（`lib/concerns.js` 的 `normalizeConcerns`）。

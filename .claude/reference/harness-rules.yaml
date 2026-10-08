@@ -456,6 +456,19 @@ constraints:
     push_approval:
       mechanism: PreToolUse_Hook
       challenge_response: true
+      # 双层实现（issue !294/!297）：仓级为主门禁，会话级兜底未装 hook 的仓。
+      # 挑战文件同名同格式，PM 审批指令两层通用；已装仓级 hook 时会话级直接放行，
+      # 避免同一 push 被要求两次审批。
+      layering:
+        - tier: repo
+          role: "主门禁"
+          hook: "hooks/git/pre-push（目标仓 .git/hooks/pre-push，需可执行）"
+          scope: "已安装 hook 的仓；按 stdin refspec 逐条判定 behind/分叉（共享分支名单：main/master/release/*/develop/dev + harness.shared-branches），再走挑战码审批"
+        - tier: session
+          role: "兜底"
+          hook: "hooks/shared/pre-tool-use-git-guard.sh 第 5 节（PreToolUse）"
+          scope: "目标仓未装可执行 pre-push 时介入；挑战码写【目标仓】.harness/，绑定目标仓 HEAD"
+          trigger: "CLAUDE_PUSH_AUTO_APPROVE≠1 且命令匹配 git push"
       steps:
         - step: 1
           action: "AI completes all local commits"
@@ -955,6 +968,13 @@ local_orchestrator:
     - from: design-review
       exit: DONE
       to: implement
+
+    # #314: 文档一致性边——实际路由由 advance 的 design-review 分支完成
+    # （P0 veto / verdict=REWORK_NEEDED → routeRework architect）；
+    # 此边供 advance --exit-status REWORK_NEEDED 显式推进时两段式匹配命中
+    - from: design-review
+      exit: REWORK_NEEDED
+      to: rework
 
     - from: implement
       exit: DONE

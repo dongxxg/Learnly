@@ -122,7 +122,10 @@ MARKDOWN
 # 构造 JSON payload 到临时文件，避免 node -e 命令行参数传递多行/特殊字符
 # 在 Windows Git Bash 等环境下，内联 bash 变量容易破坏 JSON（issue !129）
 PAYLOAD_FILE=$(mktemp)
-trap 'rm -f "$PAYLOAD_FILE"' EXIT
+# node 提取 iid 的 stderr 落盘（issue !295）：API 错误体的诊断（如 invalid_token）
+# 原先 2>/dev/null 直接丢弃，导致错误路径无任何输出
+NODE_ERR_FILE=$(mktemp)
+trap 'rm -f "$PAYLOAD_FILE" "$NODE_ERR_FILE"' EXIT
 
 SUBMIT_TITLE="$TITLE" SUBMIT_DESC="$DESCRIPTION" PAYLOAD_FILE="$PAYLOAD_FILE" node -e '
 const fs = require("fs");
@@ -137,6 +140,9 @@ RESPONSE=$(curl -s -X POST "${GITLAB_URL}/api/v4/projects/${PROJECT_ID}/issues" 
   -H "Content-Type: application/json" \
   -d "@$PAYLOAD_FILE" 2>&1)
 
+# WHY || true + stderr 落文件（issue !295）：node 对错误体 console.error + exit 1，
+# 命令替换非零会在 set -e 下直接终止脚本，下方 else 友好报错分支不可达（表现为
+# 空输出静默退出码 1）；且原 2>/dev/null 丢弃了唯一诊断信息。改为解耦 + 落盘透出。
 IID=$(echo "$RESPONSE" \
   | node -e '
 let d="";
@@ -149,12 +155,16 @@ process.stdin.on("data", c => d += c).on("end", () => {
     }
     if (typeof r.iid === "number") console.log(r.iid);
   } catch (e) {}
-})' 2>/dev/null)
+})' 2>"$NODE_ERR_FILE") || true
 
 if [ -n "$IID" ] && [ "$IID" != "null" ]; then
   echo "[submit-harness-issue] Created: ${GITLAB_URL}/public_group/rd_harness/-/issues/${IID}"
 else
   echo "[submit-harness-issue] API 提交失败，请手动提交到 ${GITLAB_URL}/public_group/rd_harness/-/issues/new" >&2
+  # 透出 node 诊断（token 过期/权限不足等根因）与原始响应体（issue !295）
+  [ -s "$NODE_ERR_FILE" ] && sed 's/^/  /' "$NODE_ERR_FILE" >&2
+  echo "--- GitLab 响应 ---" >&2
+  echo "$RESPONSE" >&2
   echo "--- 标题 ---" >&2
   echo "$TITLE" >&2
   echo "--- 描述 ---" >&2
