@@ -3,6 +3,29 @@
     {
       "path": "pages/index/index",
       "style": { "navigationBarTitleText": "知芽" }
+    },
+    {
+      "path": "pages/auth/login",
+      "style": { "navigationBarTitleText": "登录" }
+    },
+    {
+      "path": "pages/auth/register",
+      "style": { "navigationBarTitleText": "注册" }
+    },
+    {
+      "path": "pages/auth/profiles",
+      "style": { "navigationBarTitleText": "儿童档案" }
+    },
+    {
+      "path": "pages/literacy/list",
+      "style": {
+        "navigationBarTitleText": "知芽识字",
+        "enablePullDownRefresh": true
+      }
+    },
+    {
+      "path": "pages/literacy/detail",
+      "style": { "navigationBarTitleText": "汉字详情" }
     }
   ],
   "globalStyle": {

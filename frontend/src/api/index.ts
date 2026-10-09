@@ -1,7 +1,7 @@
 import { request } from './request'
 
 // 健康检查（验证前端 → backend 链路）
-export const health = () => request<{ status: string }>('/healthz')
+export const health = () => request<{ status: string }>({ url: '/healthz' })
 
 // 业务 API 占位（按模块分文件组织）：
 // export * from './literacy'   知芽识字

@@ -17,7 +17,12 @@
     },
     "modules": {},
     "distribute": {
-      "android": { "permissions": [] },
+      "android": {
+        "permissions": [
+          "<uses-permission android:name=\"android.permission.INTERNET\"/>",
+          "<uses-permission android:name=\"android.permission.ACCESS_NETWORK_STATE\"/>"
+        ]
+      },
       "ios": {},
       "sdkConfigs": {}
     }

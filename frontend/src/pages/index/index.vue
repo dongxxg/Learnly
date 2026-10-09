@@ -15,6 +15,8 @@
 </template>
 
 <script setup lang="ts">
+import { useAuthStore } from '@/stores/auth'
+
 interface LearnlyModule {
   key: string
   name: string
@@ -29,7 +31,22 @@ const modules: LearnlyModule[] = [
   { key: 'parent', name: '知芽家长助手', emoji: '家' },
 ]
 
+const authStore = useAuthStore()
+
 function onTap(m: LearnlyModule) {
+  if (m.key === 'literacy') {
+    // 登录守卫：未登录去登录页；未选儿童去档案页；否则进字库列表。
+    if (!authStore.isLoggedIn) {
+      uni.navigateTo({ url: '/pages/auth/login' })
+      return
+    }
+    if (!authStore.hasChild) {
+      uni.navigateTo({ url: '/pages/auth/profiles' })
+      return
+    }
+    uni.navigateTo({ url: '/pages/literacy/list' })
+    return
+  }
   uni.showToast({ title: `${m.name}（待开发）`, icon: 'none' })
 }
 </script>
