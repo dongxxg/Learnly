@@ -11,11 +11,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"learnly/backend/internal/auth"
 	"learnly/backend/internal/config"
 	"learnly/backend/internal/handler"
 	"learnly/backend/internal/router"
-	"learnly/backend/seeds"
 	"learnly/backend/internal/store"
+	"learnly/backend/seeds"
 )
 
 func main() {
@@ -23,6 +24,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("load config failed: %v", err)
 	}
+
+	// JWT 密钥注入：空密钥 fail-fast，杜绝伪造 token。
+	auth.Init(cfg.JWT.Secret)
 
 	gin.SetMode(cfg.Server.Mode)
 

@@ -21,8 +21,10 @@ type ProgressStats struct {
 type ProgressRepository interface {
 	FindByChildAndCharacter(ctx context.Context, childID, characterID uint64) (*model.Progress, error)
 	Upsert(ctx context.Context, childID, characterID uint64, status string) (*model.Progress, error)
+	TouchLastStudy(ctx context.Context, childID, characterID uint64) (*model.Progress, error)
 	GetStatsByChild(ctx context.Context, childID uint64) (*ProgressStats, error)
 	CountByChild(ctx context.Context, childID uint64) (int64, error)
+	ListByChildAndCharacterIDs(ctx context.Context, childID uint64, characterIDs []uint64) (map[uint64]model.Progress, error)
 }
 
 type progressRepository struct {
@@ -43,8 +45,9 @@ func (r *progressRepository) FindByChildAndCharacter(ctx context.Context, childI
 	return &p, nil
 }
 
-// Upsert 按 (child_id, character_id) 唯一约束原子更新 status。
-// 已存在则更新 status 与时间戳，不存在则创建。返回最新状态。
+// Upsert 按 (child_id, character_id) 唯一键写入 status：
+// 不存在则创建，存在则更新 status/last_study_at/completed_at。返回最新记录。
+// 注意：实现为查询+写入两步（FirstOrCreate），高并发同键写入依赖唯一约束兜底。
 func (r *progressRepository) Upsert(ctx context.Context, childID, characterID uint64, status string) (*model.Progress, error) {
 	now := time.Now()
 	p := model.Progress{
@@ -73,15 +76,38 @@ func (r *progressRepository) Upsert(ctx context.Context, childID, characterID ui
 	return &p, nil
 }
 
+// TouchLastStudy 仅刷新 last_study_at（状态保持不变）。
+// 用于状态机幂等分支：重复 start/complete 不改变状态、不改 completed_at，只更新学习时间。
+func (r *progressRepository) TouchLastStudy(ctx context.Context, childID, characterID uint64) (*model.Progress, error) {
+	now := time.Now()
+	result := r.db.WithContext(ctx).Model(&model.Progress{}).
+		Where("child_id = ? AND character_id = ?", childID, characterID).
+		Updates(map[string]interface{}{
+			"last_study_at": now,
+			"updated_at":    now,
+		})
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	if result.RowsAffected == 0 {
+		return nil, gorm.ErrRecordNotFound
+	}
+	return r.FindByChildAndCharacter(ctx, childID, characterID)
+}
+
 // GetStatsByChild 返回某儿童的学习进度统计。
+// 注意：每次计数使用独立查询链，避免 gorm Where 条件在复用链上累积。
 func (r *progressRepository) GetStatsByChild(ctx context.Context, childID uint64) (*ProgressStats, error) {
 	var learned, learning int64
-	scope := r.db.WithContext(ctx).Model(&model.Progress{}).Where("child_id = ?", childID)
 
-	if err := scope.Where("status = ?", model.StatusLearned).Count(&learned).Error; err != nil {
+	if err := r.db.WithContext(ctx).Model(&model.Progress{}).
+		Where("child_id = ? AND status = ?", childID, model.StatusLearned).
+		Count(&learned).Error; err != nil {
 		return nil, err
 	}
-	if err := scope.Where("status = ?", model.StatusLearning).Count(&learning).Error; err != nil {
+	if err := r.db.WithContext(ctx).Model(&model.Progress{}).
+		Where("child_id = ? AND status = ?", childID, model.StatusLearning).
+		Count(&learning).Error; err != nil {
 		return nil, err
 	}
 
@@ -114,4 +140,24 @@ func (r *progressRepository) CountByChild(ctx context.Context, childID uint64) (
 		return 0, err
 	}
 	return n, nil
+}
+
+// ListByChildAndCharacterIDs 批量查询某儿童在指定汉字集合上的进度（单次 IN 查询）。
+// 返回以 characterID 为键的映射；无进度的汉字不在映射中。
+func (r *progressRepository) ListByChildAndCharacterIDs(ctx context.Context, childID uint64, characterIDs []uint64) (map[uint64]model.Progress, error) {
+	result := make(map[uint64]model.Progress, len(characterIDs))
+	if childID == 0 || len(characterIDs) == 0 {
+		return result, nil
+	}
+
+	var rows []model.Progress
+	if err := r.db.WithContext(ctx).
+		Where("child_id = ? AND character_id IN ?", childID, characterIDs).
+		Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	for _, p := range rows {
+		result[p.CharacterID] = p
+	}
+	return result, nil
 }

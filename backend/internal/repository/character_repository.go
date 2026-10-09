@@ -61,7 +61,7 @@ func (r *characterRepository) List(ctx context.Context, page, size, level int) (
 	}
 
 	var items []model.Character
-	if err := tx.Order("id asc").Offset((page - 1) * size).Limit(size).Find(&items).Error; err != nil {
+	if err := tx.Order("level asc, strokes asc, id asc").Offset((page - 1) * size).Limit(size).Find(&items).Error; err != nil {
 		return nil, err
 	}
 

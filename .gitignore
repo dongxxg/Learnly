@@ -76,6 +76,8 @@ outputs/
 backend/server
 backend/cmd/server/server
 *.test
+# Go vendor 本地固化（go mod vendor 产物，不入库）
+backend/vendor/
 # Python venv / 打包
 .venv/
 venv/

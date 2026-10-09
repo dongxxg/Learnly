@@ -23,14 +23,27 @@ var (
 	ErrTokenInvalid = errors.New("token invalid")
 )
 
-// getSecret 读取 JWT 密钥，优先环境变量 JWT_SECRET（配置键 jwt.secret）。
-func getSecret() []byte {
-	secret := os.Getenv("JWT_SECRET")
+// configuredSecret 由 main 启动时经 Init 注入的配置密钥。
+var configuredSecret []byte
+
+// Init 注入配置密钥（config.Load 后立即调用）。空密钥直接拒绝启动。
+func Init(secret string) {
 	if secret == "" {
-		// 开发期默认值，生产必须通过环境变量注入。
-		secret = "learnly-dev-secret-change-me"
+		panic("JWT 密钥为空：请通过配置 jwt.secret 或环境变量 JWT_SECRET 提供")
 	}
-	return []byte(secret)
+	configuredSecret = []byte(secret)
+}
+
+// getSecret 读取 JWT 密钥：优先 Init 注入的配置，其次环境变量 JWT_SECRET。
+// 两者皆空时 panic——静默回退到公开常量会让任何人可伪造 JWT（越权），绝不回退。
+func getSecret() []byte {
+	if len(configuredSecret) > 0 {
+		return configuredSecret
+	}
+	if env := os.Getenv("JWT_SECRET"); env != "" {
+		return []byte(env)
+	}
+	panic("JWT 密钥未注入：启动时须调用 auth.Init 或设置 JWT_SECRET")
 }
 
 // GenerateToken 签发 JWT。expire 为过期时长。

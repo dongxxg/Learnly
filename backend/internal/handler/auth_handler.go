@@ -31,7 +31,7 @@ type loginReq struct {
 	Password string `json:"password" binding:"required"`
 }
 
-// Register POST /api/auth/register。
+// Register POST /api/v1/auth/register。
 func (h *AuthHandler) Register(c *gin.Context) {
 	var req registerReq
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -50,7 +50,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	c.JSON(http.StatusCreated, result)
 }
 
-// Login POST /api/auth/login。
+// Login POST /api/v1/auth/login。
 func (h *AuthHandler) Login(c *gin.Context) {
 	var req loginReq
 	if err := c.ShouldBindJSON(&req); err != nil {

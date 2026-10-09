@@ -13,8 +13,8 @@ import (
 
 // CharacterHandler 汉字 HTTP 处理器。
 type CharacterHandler struct {
-	charService   service.CharacterService
-	progressSvc   service.ProgressService
+	charService service.CharacterService
+	progressSvc service.ProgressService
 }
 
 // NewCharacterHandler 构造 CharacterHandler。
@@ -29,7 +29,7 @@ type characterListItem struct {
 	LastStudiedAt  *string `json:"lastStudiedAt,omitempty"`
 }
 
-// List GET /api/characters。
+// List GET /api/v1/characters。
 func (h *CharacterHandler) List(c *gin.Context) {
 	parentID, ok := auth.GetParentId(c)
 	if !ok {
@@ -48,17 +48,26 @@ func (h *CharacterHandler) List(c *gin.Context) {
 		return
 	}
 
+	// 批量附加进度状态（单次 IN 查询，避免 N+1）。
+	progressMap := map[uint64]model.Progress{}
+	if childID, ok := auth.GetChildId(c); ok && childID > 0 {
+		ids := make([]uint64, 0, len(result.Items))
+		for _, ch := range result.Items {
+			ids = append(ids, ch.ID)
+		}
+		if m, err := h.progressSvc.GetStatusesByCharacters(c.Request.Context(), childID, ids); err == nil {
+			progressMap = m
+		}
+	}
+
 	items := make([]characterListItem, 0, len(result.Items))
 	for _, ch := range result.Items {
 		item := characterListItem{Character: ch, ProgressStatus: model.StatusUnlearned}
-		// 若已登录且选择了 child，尝试附加进度状态。
-		if childID, ok := auth.GetChildId(c); ok && childID > 0 {
-			if p, err := h.progressSvc.GetStatusByCharacter(c.Request.Context(), childID, ch.ID); err == nil {
-				item.ProgressStatus = p.Status
-				if p.LastStudyAt != nil {
-					s := p.LastStudyAt.Format("2006-01-02T15:04:05")
-					item.LastStudiedAt = &s
-				}
+		if p, ok := progressMap[ch.ID]; ok {
+			item.ProgressStatus = p.Status
+			if p.LastStudyAt != nil {
+				s := p.LastStudyAt.Format("2006-01-02T15:04:05")
+				item.LastStudiedAt = &s
 			}
 		}
 		items = append(items, item)
@@ -72,7 +81,7 @@ func (h *CharacterHandler) List(c *gin.Context) {
 	})
 }
 
-// Detail GET /api/characters/:id。
+// Detail GET /api/v1/characters/:id。
 func (h *CharacterHandler) Detail(c *gin.Context) {
 	parentID, ok := auth.GetParentId(c)
 	if !ok {
@@ -93,19 +102,22 @@ func (h *CharacterHandler) Detail(c *gin.Context) {
 	}
 
 	resp := gin.H{
-		"id":         ch.ID,
-		"char":       ch.Char,
-		"pinyin":     ch.Pinyin,
-		"strokes":    ch.Strokes,
-		"level":      ch.Level,
-		"definition": ch.Definition,
-		"orderData":  ch.OrderData,
+		"id":             ch.ID,
+		"char":           ch.Char,
+		"pinyin":         ch.Pinyin,
+		"strokes":        ch.Strokes,
+		"level":          ch.Level,
+		"definition":     ch.Definition,
+		"orderData":      ch.OrderData,
 		"progressStatus": model.StatusUnlearned,
 	}
 	if childID, ok := auth.GetChildId(c); ok && childID > 0 {
 		if p, err := h.progressSvc.GetStatusByCharacter(c.Request.Context(), childID, ch.ID); err == nil {
 			resp["progressStatus"] = p.Status
-			resp["lastStudiedAt"] = p.LastStudyAt
+			// 与列表接口保持同一格式（本地时间字符串）。
+			if p.LastStudyAt != nil {
+				resp["lastStudiedAt"] = p.LastStudyAt.Format("2006-01-02T15:04:05")
+			}
 		}
 	}
 	c.JSON(http.StatusOK, resp)

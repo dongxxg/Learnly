@@ -3,7 +3,8 @@ package service
 import (
 	"context"
 	"errors"
-	"time"
+
+	"gorm.io/gorm"
 
 	"learnly/backend/internal/model"
 	"learnly/backend/internal/repository"
@@ -14,6 +15,7 @@ type ProgressService interface {
 	RecordStudy(ctx context.Context, childID, characterID uint64, action string) (*model.Progress, error)
 	GetStats(ctx context.Context, childID uint64) (*repository.ProgressStats, error)
 	GetStatusByCharacter(ctx context.Context, childID, characterID uint64) (*model.Progress, error)
+	GetStatusesByCharacters(ctx context.Context, childID uint64, characterIDs []uint64) (map[uint64]model.Progress, error)
 }
 
 // progressService 实现 ProgressService。
@@ -37,11 +39,13 @@ func (s *progressService) RecordStudy(ctx context.Context, childID, characterID 
 		return nil, errors.New("action 必须为 start 或 complete")
 	}
 
-	now := time.Now()
-
 	// 查询现有进度（可能不存在）。
 	existing, err := s.progressRepo.FindByChildAndCharacter(ctx, childID, characterID)
 	if err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			// 非常规错误（网络/DB 故障）不得当作"不存在"处理，原样上抛。
+			return nil, err
+		}
 		// 不存在则按 action 创建新记录。
 		return s.progressRepo.Upsert(ctx, childID, characterID, statusForAction(action))
 	}
@@ -50,24 +54,17 @@ func (s *progressService) RecordStudy(ctx context.Context, childID, characterID 
 	switch action {
 	case "start":
 		// 已学状态忽略 start；未学/在学状态转为在学。
-		if existing.Status == model.StatusLearned {
-			// 已学不可回退，仅更新 last_study_at。
-			existing.LastStudyAt = &now
-			return existing, nil
-		}
-		if existing.Status == model.StatusLearning {
-			// 已在学，仅更新时间。
-			existing.LastStudyAt = &now
-			return existing, nil
+		if existing.Status == model.StatusLearned || existing.Status == model.StatusLearning {
+			// 已学不可回退 / 已在学：状态保持，仅刷新学习时间（落库）。
+			return s.progressRepo.TouchLastStudy(ctx, childID, characterID)
 		}
 		// unlearned → learning
 		return s.progressRepo.Upsert(ctx, childID, characterID, model.StatusLearning)
 
 	case "complete":
 		if existing.Status == model.StatusLearned {
-			// 重复完成：保持已学，更新 last_study_at。
-			existing.LastStudyAt = &now
-			return existing, nil
+			// 重复完成：保持已学，仅刷新学习时间（落库，completed_at 不变）。
+			return s.progressRepo.TouchLastStudy(ctx, childID, characterID)
 		}
 		// learning/unlearned → learned
 		return s.progressRepo.Upsert(ctx, childID, characterID, model.StatusLearned)
@@ -96,4 +93,10 @@ func (s *progressService) GetStatusByCharacter(ctx context.Context, childID, cha
 		return nil, err
 	}
 	return p, nil
+}
+
+// GetStatusesByCharacters 批量返回某儿童在指定汉字集合上的进度（供列表页一次性附加）。
+// 返回以 characterID 为键的映射；无进度的汉字不在映射中。
+func (s *progressService) GetStatusesByCharacters(ctx context.Context, childID uint64, characterIDs []uint64) (map[uint64]model.Progress, error) {
+	return s.progressRepo.ListByChildAndCharacterIDs(ctx, childID, characterIDs)
 }
