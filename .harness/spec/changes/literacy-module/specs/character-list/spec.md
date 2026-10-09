@@ -32,3 +32,23 @@ The system SHALL 支持按学习进度状态（未学/在学/已学）过滤汉�
 #### Scenario: 未登录访问
 - **WHEN** 未携带 JWT 的请求访问列表接口
 - **THEN** 系统返回 401 Unauthorized
+
+## ADDED Requirements
+
+### Requirement: 汉字列表按简单到复杂排序
+The system SHALL 按"难度等级升序 → 笔画数升序 → ID 升序"对汉字列表排序，保证展示顺序稳定且从简单到复杂。
+
+#### Scenario: 默认排序
+- **WHEN** 前端请求 `GET /api/characters` 不带排序参数
+- **THEN** 系统按 level 升序、同 level 内 strokes 升序、同 strokes 内 id 升序返回列表
+
+#### Scenario: 排序跨页稳定
+- **WHEN** 前端连续请求不同页码
+- **THEN** 相同汉字在各页请求中的相对顺序保持一致（排序键唯一且稳定）
+
+### Requirement: 列表进度批量附加
+The system SHALL 以批量查询（单次 IN 查询）为当前页汉字附加学习进度状态，禁止逐字循环查询。
+
+#### Scenario: 分页列表附带进度
+- **WHEN** 前端请求 `GET /api/characters?page=1&pageSize=100`
+- **THEN** 响应中每个 item 含该 child 的进度状态，且进度查询仅产生一次数据库调用
