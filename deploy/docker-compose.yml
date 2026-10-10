@@ -31,6 +31,7 @@ services:
   ai-service:
     build:
       context: ../ai-service
+    image: learnly/ai-service:latest
     container_name: learnly-ai-service
     env_file: .env
     ports:
@@ -42,6 +43,7 @@ services:
   backend:
     build:
       context: ../backend
+    image: learnly/backend:latest
     container_name: learnly-backend
     env_file: .env
     environment:
@@ -63,6 +65,7 @@ services:
   frontend:
     build:
       context: ../frontend
+    image: learnly/frontend:latest
     container_name: learnly-frontend
     ports:
       - "8888:80"
