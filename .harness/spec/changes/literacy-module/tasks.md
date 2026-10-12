@@ -103,3 +103,15 @@
 - [x] 16.1 manifest.json app-plus 配置：应用名称/图标/启动图/权限/modules 填齐
 - [x] 16.2 打包操作文档：DCloud appid 获取、安卓 keystore 生成、HBuilderX 云打包步骤（用户执行部分显式标注）
 - [ ] 16.3 app 真机冒烟：登录→列表→详情→读音→笔顺演示→书写→进度闭环跑通
+
+## 17. 缺陷修复 — mp-weixin 笔顺书写失效（冒烟 11.3 发现）
+
+> 根因：uni-app vite 编译器在 mp 端丢弃 renderjs 模块（type('renderjs') !== filter.lang('wxs') → 空实现，不注入 WXML），hanzi-writer SVG 渲染架构上无法经 renderjs/wxs 在小程序运行。方案：vendor hanzi-writer-miniprogram src（ESM）+ hanzi-writer 官方 rendererOverride 自定义 canvas 渲染目标，全 Vue 层实现。
+
+- [x] 17.1 前端测试基建：引入 vitest（devDep + `test` script + vitest.config.ts，node 环境）
+- [x] 17.2 `hanzi-writer-mp` 桥接模块（TDD）：`render-target.ts`（legacy canvas ctx + setter polyfill + draw 合帧）、`context.ts`（HanziWriter 构造/rendererOverride/本地 charDataLoader/quiz 转发/cleanup 幂等/global polyfill）、touch 事件适配纯函数
+- [x] 17.3 `hanzi-writer-board.vue` 条件编译改造：`#ifdef MP-WEIXIN` canvas 模板 + viewShim($scope) + touch 转发；`#ifndef` renderjs 原样保留；对外 props/events/methods 契约不变
+- [x] 17.4 双端构建验证（type-check + build:h5 + build:mp-weixin 产物核对）+ design.md D8 选型附录更新
+- [x] 17.7（PM 需求变更 2026-10-12）：取消看笔顺/写一写 tab，详情页改为两块画板并列（上：演示动画+再看一遍；下：留空田字格书写+重写）；mp 端 canvas id 实例级唯一（同页多板），CanvasNodeInfo 增加 selector 供触点 rect 查询
+- [x] 17.6（复测缺陷修复 2026-10-12）：①模板级 #ifdef 被 mp 编译器转为未赋值 wx:if={{rN}} → 改数据标志 v-if/v-else；②global-polyfill 被 tree-shake → 模块顶层自执行；③setup 缺 writer.setCharacter(char) → 动画空转无报错；④hanzi-writer 3.7.3 canvas 渲染器硬依赖 Path2D（小程序逻辑层无此 API，官方适配包 peer 锁 ^2.0.4）→ 锁定 2.3.0（含 global.Path2D 特性检测降级 pathStringToCanvas）。新增渲染管线集成冒烟 render-smoke.test.ts（真实 hanzi-writer + 录制 ctx 桩），修复前 0 绘制指令→修复后全链路命中。诊断日志 [hanzi-mp] 前缀（仅 DEV 构建）
+- [ ] 17.5 微信开发者工具人工复验：详情页笔顺演示动画、写一写触屏判定（顺序错拒/连错 2 次提示轨迹/全对上报 complete）、换字与返回不串帧——评审 P1（cleanup 无效清理等）修复后的真机回归

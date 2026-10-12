@@ -106,6 +106,8 @@
 
 **理由**：uni-app app-vue 的逻辑层无法操作 DOM/SVG，renderjs 运行在视图层是官方桥接方案；同一组件在 H5 / app-vue / mp-weixin 三端编译兼容，小程序端顺带解决。
 
+**补充（2026-10-10，冒烟缺陷修复 17.x）**：原假设"三端编译兼容"不成立——mp-weixin 端 uni-app 将 renderjs 编译为 wxs（无 DOM/SVG 能力），renderjs 模块实际被编译器丢弃（`uni:mp-renderjs` 中 `type('renderjs') !== filter.lang('wxs')` → 空实现且不注入 WXML），hanzi-writer SVG 渲染器在小程序无执行环境。mp 分支改为：逻辑层 canvas 方案——vendor hanzi-writer-miniprogram src 思路（MIT），经 hanzi-writer 官方 `renderer: 'canvas'` + `rendererOverride.createRenderTarget` 注入 legacy `wx.createCanvasContext` 渲染目标（`src/hanzi-writer-mp/`），触屏事件由组件转发为指针事件，quiz 回调为普通 JS 无需桥接；笔顺数据复用本地 hanzi-data。H5/app 分支 renderjs 方案保留。
+
 ### D9: 读音 = 预生成 mp3 内嵌静态资源
 
 **选择**：一次性脚本批量生成 270 字读音 mp3（TTS 源实施期选定），放 `frontend/src/static/audio/` 构建期内嵌；详情页 `<audio>`/`uni.createInnerAudioContext` 播放
