@@ -1,0 +1,96 @@
+{
+  "p0": [],
+  "p1": [
+    {
+      "id": "MP17-01",
+      "severity": "P1",
+      "status": "resolved",
+      "file": "frontend/src/hanzi-writer-mp/context.ts",
+      "line": 96,
+      "type": "correctness",
+      "description": "teardown 调 writer?.cleanup?.() 是无效清理：hanzi-writer 3.7.3 dist 无 cleanup 方法（grep 计 0），teardown 实为空操作；换字/卸载时旧 writer 动画 timer 与活动 quiz 残留，两个 writer 同画 canvas-id 会串帧花屏，应改调 cancelQuiz+pauseAnimation 并 emitter.removeAllListeners",
+      "author": "dongxx",
+      "dimension": "code/implementation",
+      "resolved_by": "AI-Developer",
+      "resolved_at": "2026-10-10T10:38:35.604Z"
+    },
+    {
+      "id": "MP17-02",
+      "severity": "P1",
+      "status": "resolved",
+      "file": "frontend/src/hanzi-writer-mp/render-target.ts",
+      "line": 106,
+      "type": "correctness",
+      "description": "trigger 每个触点事件都异步 boundingClientRect 查询，touchmove 高频下每次跨逻辑层/视图层 IPC，回调乱序可能 pointerStart 晚于首个 pointerMove 送达导致起笔段丢失，应在 pointerStart 缓存 rect 或直接用 canvas touch 自带相对坐标",
+      "author": "dongxx",
+      "dimension": "code/implementation",
+      "resolved_by": "AI-Developer",
+      "resolved_at": "2026-10-10T10:38:35.970Z"
+    },
+    {
+      "id": "MP17-03",
+      "severity": "P1",
+      "status": "resolved",
+      "file": "frontend/src/components/hanzi-writer-board.vue",
+      "line": 217,
+      "type": "correctness",
+      "description": "initMpBoard await measureBoardSize 期间组件卸载无守卫，await 后仍 createBoardContext 并自动开判/播放，writer 泄漏且对已卸载 scope 调 createCanvasContext，需加卸载标志",
+      "author": "dongxx",
+      "dimension": "code/implementation",
+      "resolved_by": "AI-Developer",
+      "resolved_at": "2026-10-10T10:38:58.767Z"
+    }
+  ],
+  "p2": [
+    {
+      "id": "MP17-04",
+      "severity": "P2",
+      "status": "open",
+      "file": "frontend/src/pages/auth/profiles.vue",
+      "line": 28,
+      "type": "correctness",
+      "description": "越权变更：WXSS 不支持 [disabled] 选择器的修复不在任务 17.x 制品（tasks.md 无记录）也不在本次审查范围，属 mp 冒烟相关合理修复但应补记制品或拆独立提交",
+      "author": "dongxx",
+      "dimension": "code/implementation"
+    },
+    {
+      "id": "MP17-05",
+      "severity": "P2",
+      "status": "resolved",
+      "file": "frontend/src/components/hanzi-writer-board.vue",
+      "line": 35,
+      "type": "correctness",
+      "description": "import hanzi-writer-mp/context 无条件引入，H5/app 包也带上 mp 桥接并执行 global-polyfill 改写 globalThis.global 的全局副作用，可用条件编译包裹 import",
+      "author": "dongxx",
+      "dimension": "code/implementation",
+      "resolved_by": "AI-Developer",
+      "resolved_at": "2026-10-10T10:39:13.610Z"
+    },
+    {
+      "id": "MP17-06",
+      "severity": "P2",
+      "status": "resolved",
+      "file": "frontend/src/hanzi-writer-mp/render-target.ts",
+      "line": 88,
+      "type": "correctness",
+      "description": "wxApi! 非空断言，非 wx 环境直接 TypeError 且无可读错误信息，建议显式检查 fail-fast",
+      "author": "dongxx",
+      "dimension": "code/implementation",
+      "resolved_by": "AI-Developer",
+      "resolved_at": "2026-10-10T10:39:13.933Z"
+    },
+    {
+      "id": "MP17-07",
+      "severity": "P2",
+      "status": "resolved",
+      "file": "frontend/src/components/hanzi-writer-board.vue",
+      "line": 270,
+      "type": "correctness",
+      "description": "mp 端 .hw-board 宽 100% 高固定 560rpx 而 canvas 用实测宽正方形，父容器宽不等于 560rpx 时画布与田字格背景不重合",
+      "author": "dongxx",
+      "dimension": "code/implementation",
+      "resolved_by": "AI-Developer",
+      "resolved_at": "2026-10-10T10:39:14.274Z"
+    }
+  ]
+}

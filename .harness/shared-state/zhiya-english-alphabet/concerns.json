@@ -1,0 +1,104 @@
+{
+  "p0": [],
+  "p1": [
+    {
+      "id": "EA-01",
+      "severity": "P1",
+      "status": "deferred",
+      "file": ".harness/spec/changes/zhiya-english-alphabet/specs/english-alphabet/spec.md",
+      "line": 64,
+      "type": "consistency",
+      "description": "质量门禁引用不存在的 eslint 工具链：spec R5 场景与 tasks 4.1 要求\"eslint 零 error\"，但 frontend 无 eslint 依赖/配置/lint script（package.json 仅 test/type-check/gen:*，仓库无 .eslintrc/eslint.config）；design.md:18 Goals 又把 linter 解释为 type-check，三份制品分叉。验收\"linter零error\"按字面不可执行：需统一改为 type-check+vitest 或补 eslint 引入任务（16 任务均未含）",
+      "author": "dongxx",
+      "dimension": "design/spec",
+      "deferred_reason": "auto-promoted by pipeline",
+      "deferred_by": "pipeline",
+      "deferred_at": "2026-10-12T08:39:32.369Z"
+    },
+    {
+      "id": "EA-02",
+      "severity": "P1",
+      "status": "deferred",
+      "file": ".harness/spec/changes/zhiya-english-alphabet/design.md",
+      "line": 61,
+      "type": "completeness",
+      "description": "页签页点击语义未定义：D4 称 tabs.vue 为\"锚点页签\"，但锚点只能页内跳转而列表在独立 list.vue——点 tab \"C\" 后列表行为无定义（忽略 tab 全量罗列？还是定位/滚动到 C？）；tasks 3.2/3.3 均未提及传入字母参数。识字先例是 list 页内过滤 tabs（literacy/list.vue level-tabs），无跨页锚点先例，\"对齐识字交互\"的说法对页签页不成立，实现者只能自行发明",
+      "author": "dongxx",
+      "dimension": "design/spec",
+      "deferred_reason": "auto-promoted by pipeline",
+      "deferred_by": "pipeline",
+      "deferred_at": "2026-10-12T08:39:32.369Z"
+    },
+    {
+      "id": "EA-03",
+      "severity": "P1",
+      "status": "deferred",
+      "file": ".harness/spec/changes/zhiya-english-alphabet/design.md",
+      "line": 81,
+      "type": "completeness",
+      "description": "四线格线在 1024 坐标系的常量未固化：D1 生成器在 1024×1024 空间放字形（cap/x-height/baseline/descender），D2 四线格线是容器 CSS 渐变，两侧共享的四条线 y 值常量与 hanzi-writer CREATE_OPTIONS padding:8 的绘制收缩均未在设计定义，spec R5\"背景与字形不错位\"完全赌实现期对齐；mp 端容器非正方（宽约 638rpx vs 高兜底 560rpx）时百分比格线还会再偏。需设计补共享常量约定（如 metrics 模块）再进实现",
+      "author": "dongxx",
+      "dimension": "design/spec",
+      "deferred_reason": "auto-promoted by pipeline",
+      "deferred_by": "pipeline",
+      "deferred_at": "2026-10-12T08:39:32.369Z"
+    }
+  ],
+  "p2": [
+    {
+      "id": "EA-04",
+      "severity": "P2",
+      "status": "open",
+      "file": ".harness/spec/changes/zhiya-english-alphabet/proposal.md",
+      "line": 26,
+      "type": "consistency",
+      "description": "proposal Impact 列了 stores/english.ts，但 design 无任何 store 决策、tasks 无对应任务、Non-Goals 又明确无进度持久化——静态集合下 store 是死代码；按 proposal 实现会产出冗余模块，按 tasks 实现则 proposal 影响清单失真，应从 Impact 删除",
+      "author": "dongxx",
+      "dimension": "design/spec"
+    },
+    {
+      "id": "EA-05",
+      "severity": "P2",
+      "status": "open",
+      "file": ".harness/spec/changes/zhiya-english-alphabet/design.md",
+      "line": 77,
+      "type": "consistency",
+      "description": "D2 字符串 prop 方案要求 board 静态 import 双 loader（renderjs 视图层与 mp 逻辑层各一处，现 hanzi-writer-board.vue:47/293 单 loader），eager glob 全量打包使 ~100KB letter JSON 进入所有用板页面，D5\"目录隔离可独立裁剪\"的理由不成立；量级可接受但设计理由应修正（或改数据经 spec 对象下发）",
+      "author": "dongxx",
+      "dimension": "design/spec"
+    },
+    {
+      "id": "EA-06",
+      "severity": "P2",
+      "status": "open",
+      "file": ".harness/spec/changes/zhiya-english-alphabet/tasks.md",
+      "line": 20,
+      "type": "completeness",
+      "description": "详情页大小写布局未定：识字先例是每字 2 板（演示+quiz，literacy/detail.vue:36/47），大小写若照搬为 4 板，mp 端每板 560rpx 页面过长不利儿童操作；建议设计明确\"大写/小写切换、2 板常驻\"或等效方案，避免实现期临场发挥",
+      "author": "dongxx",
+      "dimension": "design/spec"
+    },
+    {
+      "id": "EA-07",
+      "severity": "P2",
+      "status": "open",
+      "file": "frontend/vitest.config.ts",
+      "line": 1,
+      "type": "completeness",
+      "description": "task 1.5 的 getLetterData 单测存在导入陷阱：vitest 无 alias 配置（node 环境），既有测试仅 type-only 导入用 @/（转译期擦除），运行时 import '@/hanzi-letter-data' 会解析失败，测试需相对路径导入或补 alias；tasks 未提示，实现者易踩",
+      "author": "dongxx",
+      "dimension": "design/spec"
+    },
+    {
+      "id": "EA-08",
+      "severity": "P2",
+      "status": "open",
+      "file": ".harness/spec/changes/zhiya-english-alphabet/tasks.md",
+      "line": 5,
+      "type": "completeness",
+      "description": "task 1.3 缺发音正确性校验步骤：单字母 TTS 存在读成词音的风险（如文本 \"A\" 被读作冠词 /ə/），design Open Questions 只留了语速档位；建议 1.3 补 26 音试听校验，并预留文本改字母名拼写（如 \"ay\"）的兜底手段",
+      "author": "dongxx",
+      "dimension": "design/spec"
+    }
+  ]
+}

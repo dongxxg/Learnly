@@ -1,0 +1,9 @@
+{
+  "round": "review-1-fix",
+  "fixed": {
+    "P0": 1,
+    "P1": 5,
+    "P2": 6
+  },
+  "result": "backend tests all green, gofmt clean, frontend type-check+build green"
+}
