@@ -28,35 +28,34 @@
       </view>
 
       <template v-if="hasStrokeData">
-        <!-- 笔顺演示 / 书写练习切换 -->
-        <view class="mode-tabs">
-          <view class="tab" :class="{ active: mode === 'animation' }" @tap="switchMode('animation')">
-            <text>看笔顺</text>
-          </view>
-          <view class="tab" :class="{ active: mode === 'quiz' }" @tap="switchMode('quiz')">
-            <text>写一写</text>
-          </view>
+        <!-- 笔顺演示（自动播放） -->
+        <view class="section-title-bar">
+          <text class="section-label">看笔顺</text>
+        </view>
+        <view class="board-wrap">
+          <hanzi-writer-board ref="animBoard" :char="detail.char" mode="animation" :auto-play="true" />
+        </view>
+        <view class="board-actions">
+          <button class="btn-action" @tap="replay">▶ 再看一遍</button>
         </view>
 
+        <!-- 书写练习（留空田字格，触屏书写） -->
+        <view class="section-title-bar">
+          <text class="section-label">写一写</text>
+        </view>
         <view class="board-wrap">
           <hanzi-writer-board
-            ref="board"
+            ref="quizBoard"
             :char="detail.char"
-            :mode="mode"
-            :auto-play="true"
+            mode="quiz"
+            :auto-play="false"
             @stroke-result="onStrokeResult"
             @quiz-complete="onQuizComplete"
           />
         </view>
-
         <view class="board-actions">
-          <template v-if="mode === 'animation'">
-            <button class="btn-action" @tap="replay">▶ 再看一遍</button>
-          </template>
-          <template v-else>
-            <button class="btn-action ghost" @tap="retryQuiz">↺ 重写</button>
-            <text class="quiz-hint">按笔顺在田字格里写，写对全部 {{ detail.strokes }} 笔就学会啦</text>
-          </template>
+          <button class="btn-action ghost" @tap="retryQuiz">↺ 重写</button>
+          <text class="quiz-hint">按笔顺在田字格里写，写对全部 {{ detail.strokes }} 笔就学会啦</text>
         </view>
       </template>
 
@@ -85,9 +84,9 @@ import { useLiteracyStore } from '@/stores/literacy'
 
 const detail = ref<CharacterItem | null>(null)
 const loadFailed = ref(false)
-const mode = ref<'animation' | 'quiz'>('animation')
 const audioBroken = ref(false)
-const board = ref<InstanceType<typeof HanziWriterBoard> | null>(null)
+const animBoard = ref<InstanceType<typeof HanziWriterBoard> | null>(null)
+const quizBoard = ref<InstanceType<typeof HanziWriterBoard> | null>(null)
 
 let characterId = 0
 let audioCtx: UniApp.InnerAudioContext | null = null
@@ -136,16 +135,12 @@ function playAudio() {
   audioCtx.play()
 }
 
-function switchMode(next: 'animation' | 'quiz') {
-  mode.value = next
-}
-
 function replay() {
-  board.value?.play()
+  animBoard.value?.play()
 }
 
 function retryQuiz() {
-  board.value?.startQuiz()
+  quizBoard.value?.startQuiz()
 }
 
 function onStrokeResult(payload: { type: string; strokeNum: number }) {
@@ -297,25 +292,14 @@ onUnload(() => {
   color: $learnly-text;
   line-height: 1.6;
 }
-.mode-tabs {
-  display: flex;
-  gap: 16rpx;
-  margin-top: 32rpx;
+.section-title-bar {
+  margin-top: 40rpx;
+  margin-bottom: 16rpx;
 }
-.tab {
-  flex: 1;
-  text-align: center;
-  padding: 20rpx 0;
-  background: #fff;
-  border-radius: 999rpx;
+.section-label {
   font-size: 30rpx;
-  color: $learnly-text-light;
-  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.05);
-
-  &.active {
-    background: $learnly-primary;
-    color: #fff;
-  }
+  font-weight: 700;
+  color: $learnly-text;
 }
 .board-wrap {
   margin-top: 32rpx;
