@@ -25,7 +25,12 @@
         maxlength="20"
         placeholder="孩子的昵称"
       />
-      <button class="btn-primary" :disabled="!newName.trim() || creating" @tap="onCreate">
+      <button
+        class="btn-primary"
+        :class="{ 'is-disabled': !newName.trim() || creating }"
+        :disabled="!newName.trim() || creating"
+        @tap="onCreate"
+      >
         {{ creating ? '创建中…' : '创建档案' }}
       </button>
     </view>
@@ -154,7 +159,8 @@ async function onCreate() {
   font-size: 32rpx;
   border-radius: $learnly-radius-md;
 
-  &[disabled] {
+  // WXSS 不支持 [disabled] 属性选择器，禁用态用 class 控制（H5/小程序通用）
+  &.is-disabled {
     opacity: 0.5;
     background: $learnly-secondary;
     color: #fff;
