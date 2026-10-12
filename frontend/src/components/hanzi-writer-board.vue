@@ -2,7 +2,11 @@
 <template>
   <!-- 模板级 #ifdef 会被 mp 编译器转为未赋值的 wx:if={{rN}}（永不渲染），
        故用数据标志 isMpWeixin 区分分支；renderjs 块在 mp 端本就被编译器丢弃。 -->
-  <view class="hw-board" :style="isMpWeixin && boardSize ? { height: boardSize + 'px' } : {}">
+  <view
+    class="hw-board"
+    :class="{ 'grid-fourline': grid === 'fourline' }"
+    :style="isMpWeixin && boardSize ? { height: boardSize + 'px' } : {}"
+  >
     <canvas
       v-if="isMpWeixin"
       :id="canvasId"
@@ -45,6 +49,7 @@
 // （hanzi-data 956KB 已由 renderjs 视图层分支独立打包，不在此重复）。
 import { createBoardContext, pointerEventFor, type BoardContext } from '@/hanzi-writer-mp/context'
 import { getHanziData } from '@/hanzi-data'
+import { getLetterData } from '@/hanzi-letter-data'
 // #endif
 
 /** mp 端 canvas 兜底尺寸（rpx），与样式表 .hw-board 固定高度一致。 */
@@ -59,6 +64,16 @@ export default {
     mode: {
       type: String,
       default: 'animation', // animation | quiz
+    },
+    /** 笔顺数据源：hanzi 汉字（默认，识字页行为不变）| letter 英文字母。 */
+    source: {
+      type: String,
+      default: 'hanzi', // hanzi | letter
+    },
+    /** 背景格线：tian 田字格（默认）| fourline 四线三格。 */
+    grid: {
+      type: String,
+      default: 'tian', // tian | fourline
     },
     /** 空间容差（1 为标准，儿童建议放宽到 ~1.6）。 */
     leniency: { type: Number, default: 1.6 },
@@ -98,6 +113,7 @@ export default {
         rev: this.rev,
         cmd: this.cmd,
         char: this.char,
+        source: this.source,
         mode: this.mode,
         autoPlay: this.autoPlay,
         leniency: this.leniency,
@@ -207,7 +223,7 @@ export default {
           autoPlay: this.autoPlay,
           leniency: this.leniency,
           hintAfterMisses: this.hintAfterMisses,
-          getCharData: getHanziData,
+          getCharData: this.source === 'letter' ? getLetterData : getHanziData,
           onReady: () => this.$emit('ready'),
           onDataMissing: () => this.$emit('dataMissing'),
           onStrokeResult: (payload) => this.$emit('strokeResult', payload),
@@ -291,6 +307,7 @@ export default {
 <script module="hw" lang="renderjs">
 import HanziWriter from 'hanzi-writer'
 import { getHanziData } from '@/hanzi-data'
+import { getLetterData } from '@/hanzi-letter-data'
 
 const CREATE_OPTIONS = {
   strokeAnimationSpeed: 1.2,
@@ -307,7 +324,7 @@ export default {
     return {
       writer: null,
       currentChar: '',
-      config: { mode: 'animation', autoPlay: true, leniency: 1.6, hint: 2 },
+      config: { source: 'hanzi', mode: 'animation', autoPlay: true, leniency: 1.6, hint: 2 },
     }
   },
 
@@ -329,6 +346,7 @@ export default {
 
     onSpecChange(spec, oldVal, ownerInstance) {
       this.config = {
+        source: spec.source,
         mode: spec.mode,
         autoPlay: spec.autoPlay,
         leniency: spec.leniency,
@@ -356,7 +374,7 @@ export default {
       const host = this.resolveHost()
       if (!host || !char) return
 
-      const data = getHanziData(char)
+      const data = this.config.source === 'letter' ? getLetterData(char) : getHanziData(char)
       if (!data) {
         this.callOwner('__onDataMissing')
         return
@@ -420,7 +438,13 @@ export default {
       const ref = this.$refs && this.$refs.host
       if (!ref) return null
       // H5/app-vue 视图层可能返回元素数组。
-      return Array.isArray(ref) ? ref[0] : ref
+      let el = Array.isArray(ref) ? ref[0] : ref
+      // uni-app H5 下内置 view 的 ref 是组件实例（含 $props animation/hoverClass…），
+      // 真实 DOM 挂在 $el（UNI-VIEW 元素）；HanziWriter 需要 DOM 节点。
+      if (el && el.$el) {
+        el = el.$el
+      }
+      return el
     },
   },
 }
@@ -445,6 +469,21 @@ export default {
   height: 560rpx;
 }
 /* #endif */
+/*
+ * 四线三格（英文字母）：四条横线位置与 scripts/gen-letter-data.mjs 的
+ * 数据空间格线常量（TOP 866 / XLINE 547 / BASE 229 / BOTTOM -90）同源换算——
+ * hanzi-writer Positioner 把固定框 y∈[-124,900]（1024 高）映射到
+ * padding 8px 内缩后的内容区，故线位 = calc(8px + (100% - 16px) * (900 - y)/1024)，
+ * 三端（H5/app/mp canvas）均与字形不错位。
+ */
+.grid-fourline {
+  background:
+    linear-gradient(to bottom, transparent calc(8px + (100% - 16px) * 0.03320313 - 1rpx), #e5e7eb calc(8px + (100% - 16px) * 0.03320313 - 1rpx), #e5e7eb calc(8px + (100% - 16px) * 0.03320313 + 1rpx), transparent calc(8px + (100% - 16px) * 0.03320313 + 1rpx)),
+    linear-gradient(to bottom, transparent calc(8px + (100% - 16px) * 0.34472656 - 1rpx), #e5e7eb calc(8px + (100% - 16px) * 0.34472656 - 1rpx), #e5e7eb calc(8px + (100% - 16px) * 0.34472656 + 1rpx), transparent calc(8px + (100% - 16px) * 0.34472656 + 1rpx)),
+    linear-gradient(to bottom, transparent calc(8px + (100% - 16px) * 0.65527344 - 1rpx), #e5e7eb calc(8px + (100% - 16px) * 0.65527344 - 1rpx), #e5e7eb calc(8px + (100% - 16px) * 0.65527344 + 1rpx), transparent calc(8px + (100% - 16px) * 0.65527344 + 1rpx)),
+    linear-gradient(to bottom, transparent calc(8px + (100% - 16px) * 0.96679688 - 1rpx), #e5e7eb calc(8px + (100% - 16px) * 0.96679688 - 1rpx), #e5e7eb calc(8px + (100% - 16px) * 0.96679688 + 1rpx), transparent calc(8px + (100% - 16px) * 0.96679688 + 1rpx)),
+    #fff;
+}
 .hw-host {
   width: 100%;
   height: 100%;

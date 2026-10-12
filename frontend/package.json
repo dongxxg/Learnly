@@ -11,6 +11,7 @@
     "build:mp-weixin": "uni build -p mp-weixin",
     "build:app": "uni build -p app",
     "gen:hanzi": "node scripts/gen-hanzi-data.mjs",
+    "gen:letter": "node scripts/gen-letter-data.mjs",
     "gen:audio": "python scripts/gen-audio.py",
     "test": "vitest run",
     "type-check": "vue-tsc --noEmit"

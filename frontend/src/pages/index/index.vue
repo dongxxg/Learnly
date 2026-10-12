@@ -47,6 +47,11 @@ function onTap(m: LearnlyModule) {
     uni.navigateTo({ url: '/pages/literacy/list' })
     return
   }
+  if (m.key === 'english') {
+    // 英语模块：静态字母集合，v1 无登录守卫、无进度上报（design D4）。
+    uni.navigateTo({ url: '/pages/english/tabs' })
+    return
+  }
   uni.showToast({ title: `${m.name}（待开发）`, icon: 'none' })
 }
 </script>

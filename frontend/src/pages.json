@@ -26,6 +26,18 @@
     {
       "path": "pages/literacy/detail",
       "style": { "navigationBarTitleText": "汉字详情" }
+    },
+    {
+      "path": "pages/english/tabs",
+      "style": { "navigationBarTitleText": "知芽英语" }
+    },
+    {
+      "path": "pages/english/list",
+      "style": { "navigationBarTitleText": "字母表" }
+    },
+    {
+      "path": "pages/english/detail",
+      "style": { "navigationBarTitleText": "字母详情" }
     }
   ],
   "globalStyle": {
