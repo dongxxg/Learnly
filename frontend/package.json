@@ -36,6 +36,8 @@
     "@types/node": "^20.14.0",
     "@vue/runtime-core": "3.4.38",
     "@vue/tsconfig": "^0.5.1",
+    "cnchar": "^3.2.6",
+    "cnchar-order": "^3.2.6",
     "sass": "^1.78.0",
     "typescript": "^5.5.4",
     "vite": "5.4.2",

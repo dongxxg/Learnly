@@ -28,12 +28,13 @@
       </view>
 
       <template v-if="hasStrokeData">
-        <!-- 笔顺演示（自动播放） -->
+        <!-- 笔顺演示（自动播放）+ 逐笔拆解（design D13，名称缺失时拆解区自动隐藏） -->
         <view class="section-title-bar">
           <text class="section-label">看笔顺</text>
         </view>
         <view class="board-wrap">
           <hanzi-writer-board ref="animBoard" :char="detail.char" mode="animation" :auto-play="true" />
+          <stroke-strip :char="detail.char" />
         </view>
         <view class="board-actions">
           <button class="btn-action" @tap="replay">▶ 再看一遍</button>
@@ -77,6 +78,7 @@
 import { onLoad, onUnload } from '@dcloudio/uni-app'
 import { computed, ref } from 'vue'
 import HanziWriterBoard from '@/components/hanzi-writer-board.vue'
+import StrokeStrip from '@/components/stroke-strip.vue'
 import { getCharacter, recordStudy, type CharacterItem, type ProgressStatus } from '@/api/literacy'
 import { charAudioPath, STATUS_CLASS, STATUS_LABEL } from '@/utils/hanzi'
 import { hasHanziData } from '@/hanzi-data'

@@ -8,6 +8,8 @@ export interface HanziData {
   strokes: string[]
   /** 每笔中线点序列，用于动画与判定。 */
   medians: number[][][]
+  /** 每笔的标准笔顺名称（横/竖/撇…），gen-hanzi-data.mjs 构建期生成；缺失时拆解区降级隐藏。 */
+  strokeNames?: string[]
 }
 
 const modules = import.meta.glob<HanziData>('./u*.json', { eager: true })
