@@ -33,7 +33,7 @@
     },
     {
       "path": "pages/english/list",
-      "style": { "navigationBarTitleText": "字母表" }
+      "style": { "navigationBarTitleText": "英语字母表" }
     },
     {
       "path": "pages/english/detail",
