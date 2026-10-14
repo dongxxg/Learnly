@@ -14,6 +14,17 @@
       </view>
     </view>
 
+    <!-- 笔顺字帖（img.png 样式）：大小写并排共享四线格 + 序号 + 方向箭头 -->
+    <template v-if="hasCopybook">
+      <view class="section-title-bar">
+        <text class="section-label">笔顺字帖</text>
+      </view>
+      <view class="board-wrap">
+        <letter-copybook :letter="letter" />
+      </view>
+      <text class="copybook-hint">数字是笔顺、箭头指方向，伸出小手跟着写吧</text>
+    </template>
+
     <!-- 大写：四线三格演示 + 书写 -->
     <template v-if="hasUpperData">
       <view class="section-title-bar">
@@ -106,6 +117,7 @@
 import { onLoad, onUnload } from '@dcloudio/uni-app'
 import { computed, ref } from 'vue'
 import HanziWriterBoard from '@/components/hanzi-writer-board.vue'
+import LetterCopybook from '@/components/letter-copybook.vue'
 import { getLetterData, hasLetterData } from '@/hanzi-letter-data'
 import { LETTERS, letterAudioPath, toLowerLetter, toUpperLetter } from '@/utils/english'
 
@@ -123,6 +135,8 @@ const lowerQuizBoard = ref<BoardRef>(null)
 // spec：某字形笔顺数据缺失 → 隐藏对应演示/书写入口并文案兜底，不白板、不报错。
 const hasUpperData = computed(() => hasLetterData(letter.value))
 const hasLowerData = computed(() => hasLetterData(lower.value))
+/** 字帖卡：大小写任一有数据即展示（缺失侧自动不占位）。 */
+const hasCopybook = computed(() => hasUpperData.value || hasLowerData.value)
 const upperStrokes = computed(() => getLetterData(letter.value)?.strokes.length ?? 0)
 const lowerStrokes = computed(() => getLetterData(lower.value)?.strokes.length ?? 0)
 
@@ -166,7 +180,7 @@ function onQuizComplete() {
 onLoad((query) => {
   const requested = toUpperLetter(String(query?.letter ?? 'A'))
   letter.value = LETTERS.includes(requested) ? requested : 'A'
-  initAudio()
+  // initAudio()
 })
 
 onUnload(() => {
@@ -279,6 +293,12 @@ onUnload(() => {
 }
 .quiz-hint {
   flex: 1;
+  font-size: 24rpx;
+  color: $learnly-text-light;
+}
+.copybook-hint {
+  display: block;
+  margin-top: 16rpx;
   font-size: 24rpx;
   color: $learnly-text-light;
 }
