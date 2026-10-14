@@ -23,7 +23,7 @@
       v-else
       ref="host"
       class="hw-host"
-      :spec="spec"
+      :spec="specSerialized"
       :change:spec="hw.onSpecChange"
     />
   </view>
@@ -119,6 +119,15 @@ export default {
         leniency: this.leniency,
         hint: this.hintAfterMisses,
       }
+    },
+    /**
+     * :change:spec 绑定值必须为字符串：uni-app H5 下每次父组件重渲染都会重取绑定值，
+     * 对象绑定按引用比较恒不相等 → onSpecChange 反复触发；renderjs 模块实例是响应式
+     * 对象，其内再写 this.config 又触发渲染，形成 Vue 调度死循环（主线程卡死）。
+     * 字符串绑定按值比较，仅真实变更才回调。
+     */
+    specSerialized(): string {
+      return JSON.stringify(this.spec)
     },
   },
 
@@ -333,7 +342,7 @@ export default {
   },
 
   methods: {
-    teardown() {
+    vwTeardown() {
       if (this.writer) {
         try {
           this.writer.cleanup()
@@ -344,24 +353,38 @@ export default {
       }
     },
 
-    onSpecChange(spec, oldVal, ownerInstance) {
-      this.config = {
+    onSpecChange(specSerialized, oldVal, ownerInstance) {
+      const spec = typeof specSerialized === 'string' ? JSON.parse(specSerialized) : specSerialized
+      // renderjs 模块实例在 H5 是响应式对象：无条件整写 this.config 会触发依赖它的
+      // 视图重渲染 → spec computed 产出新对象 → :change:spec 再触发 → 死循环
+      // （表现为主线程被 Vue 调度风暴卡死，页面失去响应）。改为仅在值真实变化时写入。
+      const nextConfig = {
         source: spec.source,
         mode: spec.mode,
         autoPlay: spec.autoPlay,
         leniency: spec.leniency,
         hint: spec.hint,
       }
+      const prevConfig = this.config || {}
+      if (
+        prevConfig.source !== nextConfig.source ||
+        prevConfig.mode !== nextConfig.mode ||
+        prevConfig.autoPlay !== nextConfig.autoPlay ||
+        prevConfig.leniency !== nextConfig.leniency ||
+        prevConfig.hint !== nextConfig.hint
+      ) {
+        this.config = nextConfig
+      }
 
       if (spec.char !== this.currentChar) {
         this.currentChar = spec.char
-        this.setup(spec.char)
+        this.vwSetup(spec.char)
         return
       }
 
       if (!spec.cmd) return
       if (spec.cmd === 'setup' || spec.cmd === 'reset') {
-        this.setup(this.currentChar)
+        this.vwSetup(this.currentChar)
       } else if (spec.cmd === 'animate') {
         if (this.writer) this.writer.animateCharacter()
       } else if (spec.cmd === 'quiz') {
@@ -369,8 +392,8 @@ export default {
       }
     },
 
-    setup(char) {
-      this.teardown()
+    vwSetup(char) {
+      this.vwTeardown()
       const host = this.resolveHost()
       if (!host || !char) return
 
@@ -396,13 +419,13 @@ export default {
       this.callOwner('__onReady')
 
       if (this.config.mode === 'quiz') {
-        this.startQuiz()
+        this.vwStartQuiz()
       } else if (this.config.autoPlay) {
         writer.animateCharacter()
       }
     },
 
-    startQuiz() {
+    vwStartQuiz() {
       if (!this.writer) return
       this.writer.cancelQuiz()
       this.writer.quiz({
