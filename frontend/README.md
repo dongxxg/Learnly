@@ -19,6 +19,7 @@ frontend/
 │   └── static/                # 静态资源
 ├── vite.config.ts
 ├── tsconfig.json
+├── scripts/desktop/main.cjs   # Electron 桌面测试壳（加载 H5 构建产物）
 └── Dockerfile                 # H5 构建产物 + nginx 反代
 ```
 
@@ -28,6 +29,25 @@ frontend/
 npm install
 npm run dev:h5            # H5 开发：http://localhost:5173
 npm run dev:mp-weixin     # 微信小程序（用微信开发者工具打开 dist/dev/mp-weixin）
+```
+
+## 桌面测试壳（Electron）
+
+Windows/Mac 桌面端跑 H5 构建产物，用于触屏/真机前的本地测试：
+
+```bash
+npm run app:desktop       # dev 模式构建 H5 + 启动桌面窗口（改动代码后用这个）
+npm run desktop           # 直接用现有 dist/build/h5 启动窗口
+```
+
+原理：`scripts/desktop/main.cjs` 在本地起 `127.0.0.1` 随机端口静态服务加载 `dist/build/h5`（规避 `file://` 下 `/static` 绝对路径失效），仅绑定回环地址。dev 模式构建（`build:h5:dev`）会内嵌 `.env.development` 的 `VITE_API_BASE_URL`，API 直连局域网 backend；纯前端模块（如数学口算）不依赖 backend。
+
+### Electron 二进制下载失败
+
+npm 直连 GitHub Releases 下载 Electron 二进制可能失败（报 `Electron failed to install`），用镜像重装：
+
+```bash
+ELECTRON_MIRROR="https://npmmirror.com/mirrors/electron/" node node_modules/electron/install.js
 ```
 
 ## 关于 uni-app 依赖版本
