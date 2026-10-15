@@ -15,8 +15,6 @@
 </template>
 
 <script setup lang="ts">
-import { useAuthStore } from '@/stores/auth'
-
 interface LearnlyModule {
   key: string
   name: string
@@ -24,27 +22,17 @@ interface LearnlyModule {
 }
 
 const modules: LearnlyModule[] = [
-  { key: 'literacy', name: '知芽识字', emoji: '字' },
+  { key: 'chinese', name: '知芽汉语', emoji: '语' },
   { key: 'english', name: '知芽英语', emoji: 'A' },
   { key: 'math', name: '知节数学', emoji: '数' },
   { key: 'ai-teacher', name: '知芽AI老师', emoji: '师' },
   { key: 'parent', name: '知芽家长助手', emoji: '家' },
 ]
 
-const authStore = useAuthStore()
-
 function onTap(m: LearnlyModule) {
-  if (m.key === 'literacy') {
-    // 登录守卫：未登录去登录页；未选儿童去档案页；否则进字库列表。
-    if (!authStore.isLoggedIn) {
-      uni.navigateTo({ url: '/pages/auth/login' })
-      return
-    }
-    if (!authStore.hasChild) {
-      uni.navigateTo({ url: '/pages/auth/profiles' })
-      return
-    }
-    uni.navigateTo({ url: '/pages/literacy/list' })
+  if (m.key === 'chinese') {
+    // 汉语模块卡片列表；识字卡的登录守卫在 chinese/tabs 卡片点击时校验。
+    uni.navigateTo({ url: '/pages/chinese/tabs' })
     return
   }
   if (m.key === 'english') {

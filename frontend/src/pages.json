@@ -17,15 +17,27 @@
       "style": { "navigationBarTitleText": "儿童档案" }
     },
     {
+      "path": "pages/chinese/tabs",
+      "style": { "navigationBarTitleText": "知芽汉语" }
+    },
+    {
       "path": "pages/literacy/list",
       "style": {
-        "navigationBarTitleText": "知芽识字",
+        "navigationBarTitleText": "识字",
         "enablePullDownRefresh": true
       }
     },
     {
       "path": "pages/literacy/detail",
       "style": { "navigationBarTitleText": "汉字详情" }
+    },
+    {
+      "path": "pages/poem/list",
+      "style": { "navigationBarTitleText": "古诗背诵" }
+    },
+    {
+      "path": "pages/poem/detail",
+      "style": { "navigationBarTitleText": "古诗详情" }
     },
     {
       "path": "pages/english/tabs",
