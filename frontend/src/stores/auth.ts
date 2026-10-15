@@ -13,6 +13,7 @@ const TOKEN_KEY = 'learnly_token'
 const PARENT_KEY = 'learnly_parent_id'
 const CHILD_KEY = 'learnly_child_id'
 const CHILDREN_KEY = 'learnly_children'
+const PHONE_KEY = 'learnly_phone'
 
 /** 登录态与当前儿童。token/childId/children 持久化，切换儿童时重置业务 store（D4）。 */
 export const useAuthStore = defineStore('auth', {
@@ -21,6 +22,7 @@ export const useAuthStore = defineStore('auth', {
     parentId: Number(uni.getStorageSync(PARENT_KEY)) || 0,
     childId: Number(uni.getStorageSync(CHILD_KEY)) || 0,
     children: parseChildren(uni.getStorageSync(CHILDREN_KEY)),
+    phone: (uni.getStorageSync(PHONE_KEY) as string) || '',
   }),
 
   getters: {
@@ -46,12 +48,14 @@ export const useAuthStore = defineStore('auth', {
 
     async register(phone: string, password: string) {
       const result = await apiRegister(phone, password)
+      this.setPhone(phone)
       this.applyAuthResult(result)
       return result
     },
 
     async login(phone: string, password: string) {
       const result = await apiLogin(phone, password)
+      this.setPhone(phone)
       this.applyAuthResult(result)
       return result
     },
@@ -71,9 +75,16 @@ export const useAuthStore = defineStore('auth', {
       useLiteracyStore().reset()
     },
 
+    /** 家长手机号持久化（我的页脱敏展示用）。 */
+    setPhone(phone: string) {
+      this.phone = phone
+      uni.setStorageSync(PHONE_KEY, phone)
+    },
+
     logout() {
       this.setSession('', 0, 0)
       this.children = []
+      this.setPhone('')
       uni.removeStorageSync(CHILDREN_KEY)
       useLiteracyStore().reset()
     },

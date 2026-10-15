@@ -17,6 +17,10 @@
       "style": { "navigationBarTitleText": "儿童档案" }
     },
     {
+      "path": "pages/auth/profile",
+      "style": { "navigationBarTitleText": "我的" }
+    },
+    {
       "path": "pages/chinese/tabs",
       "style": { "navigationBarTitleText": "知芽汉语" }
     },
@@ -64,6 +68,26 @@
       "style": { "navigationBarTitleText": "字母详情" }
     }
   ],
+  "tabBar": {
+    "color": "#9CA3AF",
+    "selectedColor": "#4CAF7A",
+    "backgroundColor": "#FFFFFF",
+    "borderStyle": "black",
+    "list": [
+      {
+        "pagePath": "pages/index/index",
+        "text": "首页",
+        "iconPath": "/static/tab/home.png",
+        "selectedIconPath": "/static/tab/home-active.png"
+      },
+      {
+        "pagePath": "pages/auth/profile",
+        "text": "我的",
+        "iconPath": "/static/tab/profile.png",
+        "selectedIconPath": "/static/tab/profile-active.png"
+      }
+    ]
+  },
   "globalStyle": {
     "navigationBarTextStyle": "black",
     "navigationBarTitleText": "知芽 Learnly",

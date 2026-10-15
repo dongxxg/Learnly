@@ -40,7 +40,7 @@
   },
   "h5": {
     "title": "知芽 Learnly",
-    "router": { "mode": "history", "base": "./" }
+    "router": { "mode": "history", "base": "/" }
   },
   "vueVersion": "3"
 }
