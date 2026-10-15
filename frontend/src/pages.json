@@ -40,6 +40,18 @@
       "style": { "navigationBarTitleText": "古诗详情" }
     },
     {
+      "path": "pages/math/tabs",
+      "style": { "navigationBarTitleText": "知节数学" }
+    },
+    {
+      "path": "pages/math/ranges",
+      "style": { "navigationBarTitleText": "加减法口算" }
+    },
+    {
+      "path": "pages/math/practice",
+      "style": { "navigationBarTitleText": "口算练习" }
+    },
+    {
       "path": "pages/english/tabs",
       "style": { "navigationBarTitleText": "知芽英语" }
     },

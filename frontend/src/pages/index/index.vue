@@ -40,6 +40,11 @@ function onTap(m: LearnlyModule) {
     uni.navigateTo({ url: '/pages/english/tabs' })
     return
   }
+  if (m.key === 'math') {
+    // 数学模块：加减法口算，纯前端本地练习，无登录守卫、无进度上报。
+    uni.navigateTo({ url: '/pages/math/tabs' })
+    return
+  }
   uni.showToast({ title: `${m.name}（待开发）`, icon: 'none' })
 }
 </script>
