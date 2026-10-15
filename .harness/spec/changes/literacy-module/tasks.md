@@ -115,3 +115,9 @@
 - [x] 17.7（PM 需求变更 2026-10-12）：取消看笔顺/写一写 tab，详情页改为两块画板并列（上：演示动画+再看一遍；下：留空田字格书写+重写）；mp 端 canvas id 实例级唯一（同页多板），CanvasNodeInfo 增加 selector 供触点 rect 查询
 - [x] 17.6（复测缺陷修复 2026-10-12）：①模板级 #ifdef 被 mp 编译器转为未赋值 wx:if={{rN}} → 改数据标志 v-if/v-else；②global-polyfill 被 tree-shake → 模块顶层自执行；③setup 缺 writer.setCharacter(char) → 动画空转无报错；④hanzi-writer 3.7.3 canvas 渲染器硬依赖 Path2D（小程序逻辑层无此 API，官方适配包 peer 锁 ^2.0.4）→ 锁定 2.3.0（含 global.Path2D 特性检测降级 pathStringToCanvas）。新增渲染管线集成冒烟 render-smoke.test.ts（真实 hanzi-writer + 录制 ctx 桩），修复前 0 绘制指令→修复后全链路命中。诊断日志 [hanzi-mp] 前缀（仅 DEV 构建）
 - [ ] 17.5 微信开发者工具人工复验：详情页笔顺演示动画、写一写触屏判定（顺序错拒/连错 2 次提示轨迹/全对上报 complete）、换字与返回不串帧——评审 P1（cleanup 无效清理等）修复后的真机回归
+
+## 18. 笔顺拆解展示（PM 需求 2026-10-14，参考 笔顺.jpg；设计见 D13；PM 更正：三区均保持田字格）
+
+- [x] 18.1 数据层（TDD）：`gen-hanzi-data.mjs` 构建期生成 `strokeNames`（cnchar-order，devDep；数量/闭集校验，命名系统性偏差全量核对修正——竖折/横折弯钩/卧钩/这·捺，见 D13 补记）+ `HanziData.strokeNames?`；守护测试 `hanzi-data/data.test.ts`（seed 全覆盖/闭集/易错字抽查）
+- [x] 18.3 stroke-strip 组件（TDD 纯函数先行 `stroke-tiles.ts` 10 用例）：三端只读拆解格——H5/app v-html 内联 SVG、mp canvas 2d 指令式绘制；每格田字格 + 已写黑/当前红/未写浅灰 + "N.名称"标签；strokeNames 缺失/长度不符时整区隐藏降级
+- [x] 18.4 详情页集成："总笔画N笔" + stroke-strip 装配到动画板下方同卡片；type-check + build:h5 + build:mp-weixin 均通过（mp WXML 无 svg 泄漏）

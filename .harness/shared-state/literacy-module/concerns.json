@@ -2,95 +2,90 @@
   "p0": [],
   "p1": [
     {
-      "id": "MP17-01",
+      "id": "R18-001",
       "severity": "P1",
-      "status": "resolved",
-      "file": "frontend/src/hanzi-writer-mp/context.ts",
-      "line": 96,
+      "status": "fixed",
+      "file": "frontend/src/components/stroke-strip.vue",
+      "line": 113,
       "type": "correctness",
-      "description": "teardown 调 writer?.cleanup?.() 是无效清理：hanzi-writer 3.7.3 dist 无 cleanup 方法（grep 计 0），teardown 实为空操作；换字/卸载时旧 writer 动画 timer 与活动 quiz 残留，两个 writer 同画 canvas-id 会串帧花屏，应改调 cancelQuiz+pauseAnimation 并 emitter.removeAllListeners",
+      "description": "mp 端 redrawMp 静默失败无兜底：measureGridWidth 返回 0 或 cell<=0 时直接 return，tiles>0 使拆解区仍渲染标题+标签但 canvas 永不绘制（半残渲染，违背组件自述不渲染半残数据）；对照 hanzi-writer-board.vue:280-292 同类查询有 uni.upx2px rpx 兜底，且 board 的 initMpBoard 有整体 try/catch 降级，本组件 drawCell/循环无 try/catch，parsePath 抛错会以 unhandled rejection 中断剩余格子绘制（当前 270 字数据已验证可解析，抛错路径暂属理论，但测量失败路径在慢设备首帧可发生且无重试）",
       "author": "dongxx",
       "dimension": "code/implementation",
-      "resolved_by": "AI-Developer",
-      "resolved_at": "2026-10-10T10:38:35.604Z"
-    },
-    {
-      "id": "MP17-02",
-      "severity": "P1",
-      "status": "resolved",
-      "file": "frontend/src/hanzi-writer-mp/render-target.ts",
-      "line": 106,
-      "type": "correctness",
-      "description": "trigger 每个触点事件都异步 boundingClientRect 查询，touchmove 高频下每次跨逻辑层/视图层 IPC，回调乱序可能 pointerStart 晚于首个 pointerMove 送达导致起笔段丢失，应在 pointerStart 缓存 rect 或直接用 canvas touch 自带相对坐标",
-      "author": "dongxx",
-      "dimension": "code/implementation",
-      "resolved_by": "AI-Developer",
-      "resolved_at": "2026-10-10T10:38:35.970Z"
-    },
-    {
-      "id": "MP17-03",
-      "severity": "P1",
-      "status": "resolved",
-      "file": "frontend/src/components/hanzi-writer-board.vue",
-      "line": 217,
-      "type": "correctness",
-      "description": "initMpBoard await measureBoardSize 期间组件卸载无守卫，await 后仍 createBoardContext 并自动开判/播放，writer 泄漏且对已卸载 scope 调 createCanvasContext，需加卸载标志",
-      "author": "dongxx",
-      "dimension": "code/implementation",
-      "resolved_by": "AI-Developer",
-      "resolved_at": "2026-10-10T10:38:58.767Z"
+      "resolution": "mp 分支兜底修复：measure 失败走 uni.upx2px rpx 兜底、整体 try/catch → renderBroken 整区隐藏（禁半残）、redrawSeq 令牌防在-flight 交错（2026-10-14）"
     }
   ],
   "p2": [
     {
-      "id": "MP17-04",
+      "id": "R18-002",
+      "severity": "P2",
+      "status": "fixed",
+      "file": "frontend/src/components/stroke-strip.vue",
+      "line": 40,
+      "type": "correctness",
+      "description": "死代码：COLUMNS=5 常量（真实列数在 .strip-cell width:18% 的 CSS 里，常量误导）与 cellColor 方法（:94）均未被引用；stroke-tiles.test.ts:5 头注释写 buildStrokeTiles 返回 null 实为 []",
+      "author": "dongxx",
+      "dimension": "code/implementation",
+      "resolution": "已清理：删除 COLUMNS/cellColor 死代码；test 头注释改为返回 []（2026-10-14）"
+    },
+    {
+      "id": "R18-003",
+      "severity": "P2",
+      "status": "fixed",
+      "file": "frontend/src/components/stroke-strip.vue",
+      "line": 115,
+      "type": "correctness",
+      "description": "魔数 0.18/-2 与 CSS 重复耦合：JS 硬编码格宽 18%（改 CSS 必须同步改 JS）且把 2rpx 边框近似为固定 2px（rpx 随屏宽缩放，宽屏下 canvas 比 cell 内区大 1-2px 被裁边）；直接测量 .cell-box boundingClientRect 可消除耦合",
+      "author": "dongxx",
+      "dimension": "code/implementation",
+      "resolution": "已改为 CELL_WIDTH_RATIO 常量（注释与 CSS 同源）+ 边框贴齐 uni.upx2px(4)（2026-10-14）"
+    },
+    {
+      "id": "R18-004",
+      "severity": "P2",
+      "status": "fixed",
+      "file": "frontend/src/components/stroke-strip.vue",
+      "line": 76,
+      "type": "correctness",
+      "description": "watch(char) 的 redrawMp 无 nextTick、无 in-flight 令牌：watch flush=pre 在 DOM 更新前查询旧节点，v-if 由隐转显或格数变化时新 canvas 查询为 null 导致该格永久空白，重入时两次循环交错绘制；当前 detail.vue 每字独立页面实例 char 不变，属复用陷阱而非现行 bug",
+      "author": "dongxx",
+      "dimension": "code/implementation",
+      "resolution": "redrawSeq 令牌修复重入交错；char watch 场景当前不存在（每字独立页面实例），令牌已覆盖热切换（2026-10-14）"
+    },
+    {
+      "id": "R18-005",
+      "severity": "P2",
+      "status": "fixed",
+      "file": "frontend/src/components/stroke-tiles.ts",
+      "line": 67,
+      "type": "correctness",
+      "description": "parsePath 对小写指令 toUpperCase 后按绝对指令解释：相对指令 q/c 会被静默画错而非按注释承诺的数据异常抛错；生成脚本未校验指令字符集，属纵深防御缺口（当前数据源已验证全为绝对大写指令）",
+      "author": "dongxx",
+      "dimension": "code/implementation",
+      "resolution": "parsePath 移除大写化：小写/相对指令现抛错（2026-10-14）"
+    },
+    {
+      "id": "R18-006",
       "severity": "P2",
       "status": "open",
-      "file": "frontend/src/pages/auth/profiles.vue",
-      "line": 28,
+      "file": "frontend/src/static/audio/letter-a.mp3",
+      "line": 0,
       "type": "correctness",
-      "description": "越权变更：WXSS 不支持 [disabled] 选择器的修复不在任务 17.x 制品（tasks.md 无记录）也不在本次审查范围，属 mp 冒烟相关合理修复但应补记制品或拆独立提交",
-      "author": "dongxx",
-      "dimension": "code/implementation"
-    },
-    {
-      "id": "MP17-05",
-      "severity": "P2",
-      "status": "resolved",
-      "file": "frontend/src/components/hanzi-writer-board.vue",
-      "line": 35,
-      "type": "correctness",
-      "description": "import hanzi-writer-mp/context 无条件引入，H5/app 包也带上 mp 桥接并执行 global-polyfill 改写 globalThis.global 的全局副作用，可用条件编译包裹 import",
+      "description": "工作区混入本任务无关 untracked 残留（zhiya-english-alphabet 探针脚本/截图/probe-a.mp3、26 个 letter-*.mp3、根目录 img.png 与笔顺.jpg）：提交 literacy-module 若 git add -A 会误收；笔顺.jpg 是 D13 设计参考图，应移入 .harness 或删除",
       "author": "dongxx",
       "dimension": "code/implementation",
-      "resolved_by": "AI-Developer",
-      "resolved_at": "2026-10-10T10:39:13.610Z"
+      "resolution": "等 PM 决定：笔顺.jpg 建议收编 docs/ 或随 D13 引用提交；其余探针/截图/mp3 属 zhiya 任务，不在本次范围"
     },
     {
-      "id": "MP17-06",
+      "id": "R18-007",
       "severity": "P2",
-      "status": "resolved",
-      "file": "frontend/src/hanzi-writer-mp/render-target.ts",
-      "line": 88,
+      "status": "accepted",
+      "file": "frontend/scripts/gen-hanzi-data.mjs",
+      "line": 20,
       "type": "correctness",
-      "description": "wxApi! 非空断言，非 wx 环境直接 TypeError 且无可读错误信息，建议显式检查 fail-fast",
+      "description": "STANDARD_NAMES 闭集在 gen-hanzi-data.mjs:20-26 与 data.test.ts:21-27 双份维护，注释称同源约束但无机制防漂移（脚本改闭集测试不感知），宜抽共享模块",
       "author": "dongxx",
       "dimension": "code/implementation",
-      "resolved_by": "AI-Developer",
-      "resolved_at": "2026-10-10T10:39:13.933Z"
-    },
-    {
-      "id": "MP17-07",
-      "severity": "P2",
-      "status": "resolved",
-      "file": "frontend/src/components/hanzi-writer-board.vue",
-      "line": 270,
-      "type": "correctness",
-      "description": "mp 端 .hw-board 宽 100% 高固定 560rpx 而 canvas 用实测宽正方形，父容器宽不等于 560rpx 时画布与田字格背景不重合",
-      "author": "dongxx",
-      "dimension": "code/implementation",
-      "resolved_by": "AI-Developer",
-      "resolved_at": "2026-10-10T10:39:14.274Z"
+      "resolution": "接受双份维护：共享 .mjs 需 TS 声明摩擦；漂移失败模式已可见（脚本闭集收窄→gen 失败；测试闭集收窄→data.test 失败），不阻塞"
     }
   ]
 }
