@@ -283,14 +283,14 @@ export default {
   position: relative;
   width: 100%;
   /* 幅面比例内联下发（随字形数变化），见 copybookStyle。 */
-  border: 2rpx solid #d1d5db;
+  border: 2rpx solid $learnly-border;
   border-radius: $learnly-radius-sm;
   background:
-    linear-gradient(to bottom, transparent calc(100% * 0.1192149 - 1rpx), #e5e7eb calc(100% * 0.1192149 - 1rpx), #e5e7eb calc(100% * 0.1192149 + 1rpx), transparent calc(100% * 0.1192149 + 1rpx)),
-    linear-gradient(to bottom, transparent calc(100% * 0.4030249 - 1rpx), #e5e7eb calc(100% * 0.4030249 - 1rpx), #e5e7eb calc(100% * 0.4030249 + 1rpx), transparent calc(100% * 0.4030249 + 1rpx)),
-    linear-gradient(to bottom, transparent calc(100% * 0.6859431 - 1rpx), #e5e7eb calc(100% * 0.6859431 - 1rpx), #e5e7eb calc(100% * 0.6859431 + 1rpx), transparent calc(100% * 0.6859431 + 1rpx)),
-    linear-gradient(to bottom, transparent calc(100% * 0.9697156 - 1rpx), #e5e7eb calc(100% * 0.9697156 - 1rpx), #e5e7eb calc(100% * 0.9697156 + 1rpx), transparent calc(100% * 0.9697156 + 1rpx)),
-    #fff;
+    linear-gradient(to bottom, transparent calc(100% * 0.1192149 - 1rpx), $learnly-border calc(100% * 0.1192149 - 1rpx), $learnly-border calc(100% * 0.1192149 + 1rpx), transparent calc(100% * 0.1192149 + 1rpx)),
+    linear-gradient(to bottom, transparent calc(100% * 0.4030249 - 1rpx), $learnly-border calc(100% * 0.4030249 - 1rpx), $learnly-border calc(100% * 0.4030249 + 1rpx), transparent calc(100% * 0.4030249 + 1rpx)),
+    linear-gradient(to bottom, transparent calc(100% * 0.6859431 - 1rpx), $learnly-border calc(100% * 0.6859431 - 1rpx), $learnly-border calc(100% * 0.6859431 + 1rpx), transparent calc(100% * 0.6859431 + 1rpx)),
+    linear-gradient(to bottom, transparent calc(100% * 0.9697156 - 1rpx), $learnly-border calc(100% * 0.9697156 - 1rpx), $learnly-border calc(100% * 0.9697156 + 1rpx), transparent calc(100% * 0.9697156 + 1rpx)),
+    $learnly-surface;
   overflow: hidden;
 }
 /* #ifdef MP-WEIXIN */

@@ -95,9 +95,9 @@ function onLogout() {
   min-height: 100vh;
 }
 .card {
-  background: #fff;
+  background: $learnly-surface;
   border-radius: $learnly-radius-lg;
-  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.05);
+  box-shadow: $learnly-shadow-sm;
 }
 .card-user {
   display: flex;
@@ -115,7 +115,7 @@ function onLogout() {
   border-radius: 50%;
 }
 .avatar-glyph {
-  font-size: 48rpx;
+  font-size: $learnly-fs-xl;
   font-weight: 800;
   color: $learnly-primary;
 }
@@ -131,11 +131,11 @@ function onLogout() {
 .user-sub {
   display: block;
   margin-top: 8rpx;
-  font-size: 24rpx;
+  font-size: $learnly-fs-sm;
   color: $learnly-text-light;
 }
 .card-chevron {
-  font-size: 48rpx;
+  font-size: $learnly-fs-xl;
   color: $learnly-text-light;
 }
 .card-child {
@@ -166,7 +166,7 @@ function onLogout() {
 }
 .child-label {
   display: block;
-  font-size: 22rpx;
+  font-size: $learnly-fs-sm;
   color: $learnly-text-light;
 }
 .child-name {
@@ -182,7 +182,7 @@ function onLogout() {
   border-radius: 999rpx;
 }
 .switch-text {
-  font-size: 26rpx;
+  font-size: $learnly-fs-base;
   font-weight: 700;
   color: $learnly-primary;
 }
@@ -199,17 +199,17 @@ function onLogout() {
   padding: 36rpx 24rpx 28rpx;
 }
 .mini-emoji {
-  font-size: 56rpx;
+  font-size: $learnly-fs-3xl;
   line-height: 1.2;
 }
 .card-title {
   display: block;
-  font-size: 34rpx;
+  font-size: $learnly-fs-lg;
   font-weight: 700;
   color: $learnly-text;
 
   &.small {
-    font-size: 30rpx;
+    font-size: $learnly-fs-md;
   }
 }
 .soon-badge {
@@ -219,17 +219,17 @@ function onLogout() {
   border-radius: 999rpx;
 }
 .soon-text {
-  font-size: 20rpx;
+  font-size: $learnly-fs-xs;
   color: $learnly-text-light;
 }
 .logout-btn {
   margin: 48rpx 0 0;
   padding: 24rpx 0;
-  background: #fff;
+  background: $learnly-surface;
   border-radius: $learnly-radius-md;
-  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.05);
-  font-size: 30rpx;
+  box-shadow: $learnly-shadow-sm;
+  font-size: $learnly-fs-md;
   font-weight: 700;
-  color: #e05252;
+  color: $learnly-danger;
 }
 </style>

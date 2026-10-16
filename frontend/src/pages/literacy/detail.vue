@@ -201,10 +201,10 @@ onUnload(() => {
   display: flex;
   align-items: center;
   gap: 40rpx;
-  background: #fff;
+  background: $learnly-surface;
   padding: 40rpx;
   border-radius: $learnly-radius-lg;
-  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.05);
+  box-shadow: $learnly-shadow-sm;
 }
 .char-display {
   width: 200rpx;
@@ -212,15 +212,15 @@ onUnload(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 2rpx solid #e5e7eb;
+  border: 2rpx solid $learnly-border;
   border-radius: $learnly-radius-md;
   background:
-    linear-gradient(to right, transparent calc(50% - 1rpx), #e5e7eb calc(50% - 1rpx), #e5e7eb calc(50% + 1rpx), transparent calc(50% + 1rpx)),
-    linear-gradient(to bottom, transparent calc(50% - 1rpx), #e5e7eb calc(50% - 1rpx), #e5e7eb calc(50% + 1rpx), transparent calc(50% + 1rpx)),
-    #fff;
+    linear-gradient(to right, transparent calc(50% - 1rpx), $learnly-border calc(50% - 1rpx), $learnly-border calc(50% + 1rpx), transparent calc(50% + 1rpx)),
+    linear-gradient(to bottom, transparent calc(50% - 1rpx), $learnly-border calc(50% - 1rpx), $learnly-border calc(50% + 1rpx), transparent calc(50% + 1rpx)),
+    $learnly-surface;
 }
 .char {
-  font-size: 120rpx;
+  font-size: 120rpx; /* token-scan:ignore 楷体主字教学展示尺寸，非主题令牌 */
   color: $learnly-text;
   font-family: 'Kaiti SC', 'KaiTi', 'STKaiti', serif;
 }
@@ -228,7 +228,7 @@ onUnload(() => {
   flex: 1;
 }
 .pinyin {
-  font-size: 56rpx;
+  font-size: $learnly-fs-3xl;
   font-weight: 700;
   color: $learnly-primary;
 }
@@ -240,13 +240,13 @@ onUnload(() => {
 }
 .strokes,
 .level {
-  font-size: 26rpx;
+  font-size: $learnly-fs-base;
   color: $learnly-text-light;
 }
 .status-badge {
   padding: 2rpx 16rpx;
   border-radius: 999rpx;
-  font-size: 22rpx;
+  font-size: $learnly-fs-sm;
 
   &.status-unlearned {
     background: $learnly-bg;
@@ -267,7 +267,7 @@ onUnload(() => {
   line-height: 72rpx;
   background: rgba($learnly-primary, 0.12);
   color: $learnly-primary;
-  font-size: 28rpx;
+  font-size: $learnly-fs-base;
   border-radius: $learnly-radius-md;
 
   &[disabled] {
@@ -278,19 +278,19 @@ onUnload(() => {
 }
 .section {
   margin-top: 32rpx;
-  background: #fff;
+  background: $learnly-surface;
   padding: 32rpx;
   border-radius: $learnly-radius-lg;
 }
 .section-title {
   display: block;
-  font-size: 30rpx;
+  font-size: $learnly-fs-md;
   font-weight: 700;
   color: $learnly-text;
   margin-bottom: 12rpx;
 }
 .definition {
-  font-size: 30rpx;
+  font-size: $learnly-fs-md;
   color: $learnly-text;
   line-height: 1.6;
 }
@@ -299,16 +299,16 @@ onUnload(() => {
   margin-bottom: 16rpx;
 }
 .section-label {
-  font-size: 30rpx;
+  font-size: $learnly-fs-md;
   font-weight: 700;
   color: $learnly-text;
 }
 .board-wrap {
   margin-top: 32rpx;
   padding: 24rpx;
-  background: #fff;
+  background: $learnly-surface;
   border-radius: $learnly-radius-lg;
-  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.05);
+  box-shadow: $learnly-shadow-sm;
 }
 .board-actions {
   display: flex;
@@ -322,29 +322,29 @@ onUnload(() => {
   line-height: 80rpx;
   padding: 0 40rpx;
   background: $learnly-primary;
-  color: #fff;
-  font-size: 28rpx;
+  color: $learnly-surface;
+  font-size: $learnly-fs-base;
   border-radius: $learnly-radius-md;
 
   &.ghost {
-    background: #fff;
+    background: $learnly-surface;
     color: $learnly-primary;
     border: 2rpx solid $learnly-primary;
   }
 }
 .quiz-hint {
   flex: 1;
-  font-size: 24rpx;
+  font-size: $learnly-fs-sm;
   color: $learnly-text-light;
 }
 .fallback-text {
-  font-size: 28rpx;
+  font-size: $learnly-fs-base;
   color: $learnly-text-light;
 }
 .empty {
   text-align: center;
   padding: 120rpx 0;
   color: $learnly-text-light;
-  font-size: 28rpx;
+  font-size: $learnly-fs-base;
 }
 </style>

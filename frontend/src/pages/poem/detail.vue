@@ -73,7 +73,7 @@ onLoad((query) => {
   padding: 6rpx 28rpx;
   background: rgba($learnly-primary, 0.12);
   border-radius: 999rpx;
-  font-size: 26rpx;
+  font-size: $learnly-fs-base;
   color: $learnly-primary;
 }
 .poem-body {
@@ -82,9 +82,9 @@ onLoad((query) => {
   align-items: center;
   gap: 28rpx;
   padding: 48rpx 24rpx;
-  background: #fff;
+  background: $learnly-surface;
   border-radius: $learnly-radius-lg;
-  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.05);
+  box-shadow: $learnly-shadow-sm;
 }
 .poem-line {
   display: flex;
@@ -99,7 +99,7 @@ onLoad((query) => {
   min-width: 44rpx;
 }
 .cell-pinyin {
-  font-size: 20rpx;
+  font-size: $learnly-fs-xs;
   line-height: 1.4;
   color: $learnly-text-light;
 }
@@ -116,20 +116,20 @@ onLoad((query) => {
 }
 .translation-label {
   display: block;
-  font-size: 24rpx;
+  font-size: $learnly-fs-sm;
   font-weight: 700;
   color: $learnly-primary;
   margin-bottom: 16rpx;
 }
 .translation-text {
-  font-size: 28rpx;
+  font-size: $learnly-fs-base;
   line-height: 1.8;
   color: $learnly-text;
 }
 .missing {
   text-align: center;
   margin-top: 200rpx;
-  font-size: 28rpx;
+  font-size: $learnly-fs-base;
   color: $learnly-text-light;
 }
 </style>

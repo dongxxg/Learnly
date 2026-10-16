@@ -72,14 +72,14 @@ function goRegister() {
 }
 .logo {
   display: block;
-  font-size: 88rpx;
+  font-size: $learnly-fs-hero;
   font-weight: 800;
   color: $learnly-primary;
 }
 .slogan {
   display: block;
   margin-top: 16rpx;
-  font-size: 28rpx;
+  font-size: $learnly-fs-base;
   color: $learnly-text-light;
 }
 .form {
@@ -90,7 +90,7 @@ function goRegister() {
   height: 96rpx;
   padding: 0 32rpx;
   margin-bottom: 32rpx;
-  background: #fff;
+  background: $learnly-surface;
   border-radius: $learnly-radius-md;
   font-size: 32rpx;
 }
@@ -98,14 +98,14 @@ function goRegister() {
   height: 96rpx;
   line-height: 96rpx;
   background: $learnly-primary;
-  color: #fff;
-  font-size: 34rpx;
+  color: $learnly-surface;
+  font-size: $learnly-fs-lg;
   border-radius: $learnly-radius-md;
 
   &[disabled] {
     opacity: 0.5;
     background: $learnly-primary;
-    color: #fff;
+    color: $learnly-surface;
   }
 }
 .links {
@@ -113,7 +113,7 @@ function goRegister() {
   text-align: center;
 }
 .link {
-  font-size: 28rpx;
+  font-size: $learnly-fs-base;
   color: $learnly-primary;
 }
 </style>

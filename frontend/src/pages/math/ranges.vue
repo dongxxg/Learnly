@@ -35,14 +35,14 @@ function goPractice(range: number) {
 }
 .title {
   display: block;
-  font-size: 52rpx;
+  font-size: $learnly-fs-xl;
   font-weight: 800;
   color: $learnly-text;
 }
 .subtitle {
   display: block;
   margin-top: 12rpx;
-  font-size: 26rpx;
+  font-size: $learnly-fs-base;
   color: $learnly-text-light;
 }
 .range-grid {
@@ -55,9 +55,9 @@ function goPractice(range: number) {
   flex-direction: column;
   align-items: center;
   padding: 44rpx 24rpx 36rpx;
-  background: #fff;
+  background: $learnly-surface;
   border-radius: $learnly-radius-lg;
-  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.05);
+  box-shadow: $learnly-shadow-sm;
 }
 .range-value {
   font-size: 44rpx;
@@ -66,7 +66,7 @@ function goPractice(range: number) {
 }
 .range-sub {
   margin-top: 12rpx;
-  font-size: 22rpx;
+  font-size: $learnly-fs-sm;
   color: $learnly-text-light;
 }
 </style>

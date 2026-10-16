@@ -1,10 +1,51 @@
-/* 全局 SCSS 变量 —— 知芽设计 token */
-$learnly-primary: #4CAF7A;     /* 萌芽绿 */
-$learnly-secondary: #FFB43D;   /* 暖阳橙 */
-$learnly-bg: #F7F8FA;
-$learnly-text: #1F2937;
-$learnly-text-light: #9CA3AF;
+/* 全局 SCSS 变量 —— 知芽设计 token（唯一事实源）
+   约束：值必须为字面量、单行（不得引用其他变量/函数），与 App.vue 的 CSS 变量双轨同步，
+   守护测试见 src/styles/design-tokens.sync.test.ts；pages.json 主题色亦受同测试约束。 */
 
+/* —— 品牌色 —— */
+$learnly-primary: #4CAF7A;         /* 萌芽绿 */
+$learnly-primary-deep: #3E9163;    /* 萌芽绿·深：渐变深端/按压态 */
+$learnly-primary-soft: #E8F6EE;    /* 萌芽绿·浅底 */
+$learnly-secondary: #FFB43D;       /* 暖阳橙 */
+$learnly-secondary-soft: #FFF3DE;  /* 暖阳橙·浅底 */
+
+/* —— 状态色 —— */
+$learnly-success: #4CAF7A;
+$learnly-warning: #E67E22;
+$learnly-danger: #E05252;
+$learnly-danger-soft: #FDECEC;
+$learnly-info: #5B8DEF;
+
+/* —— 中性色 —— */
+$learnly-surface: #FFFFFF;         /* 卡片/导航栏表面 */
+$learnly-bg: #F7F8FA;              /* 页面背景 */
+$learnly-text: #1F2937;
+$learnly-text-secondary: #4B5563;
+$learnly-text-light: #9CA3AF;
+$learnly-border: #E5E7EB;
+$learnly-border-light: #F3F4F6;
+
+/* —— 字阶（8 级，档位依据全站 112 处字号实测：87% 集中于 20-34rpx，低段密高段疏） —— */
+$learnly-fs-xs: 20rpx;             /* 最小注记 */
+$learnly-fs-sm: 24rpx;             /* 辅助文本 */
+$learnly-fs-base: 28rpx;           /* 正文 */
+$learnly-fs-md: 32rpx;             /* 卡片标题 */
+$learnly-fs-lg: 36rpx;             /* 区块标题 */
+$learnly-fs-xl: 44rpx;             /* 页面标题/大数字 */
+$learnly-fs-3xl: 64rpx;            /* hero 标题 */
+$learnly-fs-hero: 88rpx;           /* 展示字（字母卡等） */
+
+/* —— 间距（4 级，4 栅格） —— */
+$learnly-space-xs: 16rpx;
+$learnly-space-sm: 24rpx;
+$learnly-space-md: 32rpx;
+$learnly-space-lg: 48rpx;
+
+/* —— 圆角（3 级） —— */
 $learnly-radius-sm: 8rpx;
 $learnly-radius-md: 16rpx;
 $learnly-radius-lg: 24rpx;
+
+/* —— 阴影（2 级） —— */
+$learnly-shadow-sm: 0 2rpx 12rpx rgba(0, 0, 0, 0.05);
+$learnly-shadow-lg: 0 8rpx 32rpx rgba(31, 41, 55, 0.12);

@@ -86,20 +86,20 @@ function comingSoon(title: string) {
 }
 .title {
   display: block;
-  font-size: 52rpx;
+  font-size: $learnly-fs-xl;
   font-weight: 800;
   color: $learnly-text;
 }
 .subtitle {
   display: block;
   margin-top: 12rpx;
-  font-size: 26rpx;
+  font-size: $learnly-fs-base;
   color: $learnly-text-light;
 }
 .card {
-  background: #fff;
+  background: $learnly-surface;
   border-radius: $learnly-radius-lg;
-  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.05);
+  box-shadow: $learnly-shadow-sm;
 }
 .card-row {
   display: flex;
@@ -121,16 +121,16 @@ function comingSoon(title: string) {
   background: rgba($learnly-primary, 0.12);
 
   &.alt {
-    background: rgba(230, 126, 34, 0.14);
+    background: $learnly-secondary-soft;
   }
 }
 .glyph {
-  font-size: 52rpx;
+  font-size: $learnly-fs-xl;
   font-weight: 800;
   color: $learnly-primary;
 
   .alt & {
-    color: #e67e22;
+    color: $learnly-warning;
   }
 }
 .card-text {
@@ -138,22 +138,22 @@ function comingSoon(title: string) {
 }
 .card-title {
   display: block;
-  font-size: 34rpx;
+  font-size: $learnly-fs-lg;
   font-weight: 700;
   color: $learnly-text;
 
   &.small {
-    font-size: 30rpx;
+    font-size: $learnly-fs-md;
   }
 }
 .card-sub {
   display: block;
   margin-top: 8rpx;
-  font-size: 24rpx;
+  font-size: $learnly-fs-sm;
   color: $learnly-text-light;
 }
 .card-chevron {
-  font-size: 48rpx;
+  font-size: $learnly-fs-xl;
   color: $learnly-text-light;
 }
 .card-grid {
@@ -169,7 +169,7 @@ function comingSoon(title: string) {
   padding: 36rpx 24rpx 28rpx;
 }
 .mini-emoji {
-  font-size: 56rpx;
+  font-size: $learnly-fs-3xl;
   line-height: 1.2;
 }
 .soon-badge {
@@ -179,7 +179,7 @@ function comingSoon(title: string) {
   border-radius: 999rpx;
 }
 .soon-text {
-  font-size: 20rpx;
+  font-size: $learnly-fs-xs;
   color: $learnly-text-light;
 }
 </style>

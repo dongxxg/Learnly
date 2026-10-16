@@ -78,14 +78,14 @@ async function onCreate() {
 }
 .section-title {
   display: block;
-  font-size: 40rpx;
+  font-size: $learnly-fs-xl;
   font-weight: 700;
   color: $learnly-text;
 }
 .section-desc {
   display: block;
   margin: 12rpx 0 32rpx;
-  font-size: 26rpx;
+  font-size: $learnly-fs-base;
   color: $learnly-text-light;
 }
 .child-list {
@@ -100,10 +100,10 @@ async function onCreate() {
   flex-direction: column;
   align-items: center;
   padding: 40rpx 0;
-  background: #fff;
+  background: $learnly-surface;
   border: 4rpx solid transparent;
   border-radius: $learnly-radius-lg;
-  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.05);
+  box-shadow: $learnly-shadow-sm;
 
   &.active {
     border-color: $learnly-primary;
@@ -122,7 +122,7 @@ async function onCreate() {
   margin-bottom: 16rpx;
 }
 .name {
-  font-size: 30rpx;
+  font-size: $learnly-fs-md;
   color: $learnly-text;
 }
 .badge {
@@ -131,13 +131,13 @@ async function onCreate() {
   right: 16rpx;
   padding: 4rpx 16rpx;
   background: $learnly-primary;
-  color: #fff;
-  font-size: 22rpx;
+  color: $learnly-surface;
+  font-size: $learnly-fs-sm;
   border-radius: 999rpx;
 }
 .create {
   padding-top: 32rpx;
-  border-top: 2rpx solid #e5e7eb;
+  border-top: 2rpx solid $learnly-border;
 
   .section-title {
     margin-bottom: 24rpx;
@@ -147,7 +147,7 @@ async function onCreate() {
   height: 96rpx;
   padding: 0 32rpx;
   margin-bottom: 32rpx;
-  background: #fff;
+  background: $learnly-surface;
   border-radius: $learnly-radius-md;
   font-size: 32rpx;
 }
@@ -155,7 +155,7 @@ async function onCreate() {
   height: 96rpx;
   line-height: 96rpx;
   background: $learnly-secondary;
-  color: #fff;
+  color: $learnly-surface;
   font-size: 32rpx;
   border-radius: $learnly-radius-md;
 
@@ -163,7 +163,7 @@ async function onCreate() {
   &.is-disabled {
     opacity: 0.5;
     background: $learnly-secondary;
-    color: #fff;
+    color: $learnly-surface;
   }
 }
 </style>

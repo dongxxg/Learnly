@@ -111,11 +111,11 @@ function statusClass(status: ProgressStatus) {
 }
 .stats-bar {
   display: flex;
-  background: #fff;
+  background: $learnly-surface;
   border-radius: $learnly-radius-lg;
   padding: 24rpx 0;
   margin-bottom: 24rpx;
-  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.05);
+  box-shadow: $learnly-shadow-sm;
 }
 .stat {
   flex: 1;
@@ -134,7 +134,7 @@ function statusClass(status: ProgressStatus) {
 }
 .stat-label {
   margin-top: 4rpx;
-  font-size: 24rpx;
+  font-size: $learnly-fs-sm;
   color: $learnly-text-light;
 }
 .level-tabs {
@@ -145,14 +145,14 @@ function statusClass(status: ProgressStatus) {
   display: inline-block;
   padding: 12rpx 32rpx;
   margin-right: 16rpx;
-  background: #fff;
+  background: $learnly-surface;
   border-radius: 999rpx;
-  font-size: 26rpx;
+  font-size: $learnly-fs-base;
   color: $learnly-text-light;
 
   &.active {
     background: $learnly-primary;
-    color: #fff;
+    color: $learnly-surface;
   }
 }
 .grid {
@@ -166,9 +166,9 @@ function statusClass(status: ProgressStatus) {
   flex-direction: column;
   align-items: center;
   padding: 20rpx 0 16rpx;
-  background: #fff;
+  background: $learnly-surface;
   border-radius: $learnly-radius-md;
-  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.05);
+  box-shadow: $learnly-shadow-sm;
 }
 .tian-grid {
   width: 128rpx;
@@ -176,20 +176,20 @@ function statusClass(status: ProgressStatus) {
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 2rpx solid #e5e7eb;
+  border: 2rpx solid $learnly-border;
   background:
-    linear-gradient(to right, transparent calc(50% - 1rpx), #e5e7eb calc(50% - 1rpx), #e5e7eb calc(50% + 1rpx), transparent calc(50% + 1rpx)),
-    linear-gradient(to bottom, transparent calc(50% - 1rpx), #e5e7eb calc(50% - 1rpx), #e5e7eb calc(50% + 1rpx), transparent calc(50% + 1rpx));
+    linear-gradient(to right, transparent calc(50% - 1rpx), $learnly-border calc(50% - 1rpx), $learnly-border calc(50% + 1rpx), transparent calc(50% + 1rpx)),
+    linear-gradient(to bottom, transparent calc(50% - 1rpx), $learnly-border calc(50% - 1rpx), $learnly-border calc(50% + 1rpx), transparent calc(50% + 1rpx));
   border-radius: $learnly-radius-sm;
 }
 .char {
-  font-size: 76rpx;
+  font-size: $learnly-fs-hero;
   color: $learnly-text;
   font-family: 'Kaiti SC', 'KaiTi', 'STKaiti', serif;
 }
 .pinyin {
   margin-top: 8rpx;
-  font-size: 24rpx;
+  font-size: $learnly-fs-sm;
   color: $learnly-text-light;
 }
 .status-badge {
@@ -198,7 +198,7 @@ function statusClass(status: ProgressStatus) {
   right: 8rpx;
   padding: 2rpx 12rpx;
   border-radius: 999rpx;
-  font-size: 20rpx;
+  font-size: $learnly-fs-xs;
 
   &.status-unlearned {
     background: $learnly-bg;
@@ -218,6 +218,6 @@ function statusClass(status: ProgressStatus) {
   text-align: center;
   padding: 80rpx 0;
   color: $learnly-text-light;
-  font-size: 28rpx;
+  font-size: $learnly-fs-base;
 }
 </style>

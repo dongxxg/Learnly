@@ -17,7 +17,9 @@
     "desktop": "electron scripts/desktop/main.cjs",
     "app:desktop": "npm run build:h5:dev && npm run desktop",
     "test": "vitest run",
-    "type-check": "vue-tsc --noEmit"
+    "type-check": "vue-tsc --noEmit",
+    "check:tokens": "node scripts/check-tokens.mjs",
+    "check:tokens:strict": "node scripts/check-tokens.mjs --strict"
   },
   "dependencies": {
     "@dcloudio/uni-app": "3.0.0-4060620250520001",

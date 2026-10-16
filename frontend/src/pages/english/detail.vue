@@ -198,10 +198,10 @@ onUnload(() => {
   display: flex;
   align-items: center;
   gap: 40rpx;
-  background: #fff;
+  background: $learnly-surface;
   padding: 40rpx;
   border-radius: $learnly-radius-lg;
-  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.05);
+  box-shadow: $learnly-shadow-sm;
 }
 .glyph-display {
   width: 200rpx;
@@ -209,12 +209,12 @@ onUnload(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 2rpx solid #e5e7eb;
+  border: 2rpx solid $learnly-border;
   border-radius: $learnly-radius-md;
-  background: #fff;
+  background: $learnly-surface;
 }
 .glyph {
-  font-size: 100rpx;
+  font-size: $learnly-fs-hero;
   font-weight: 800;
   color: $learnly-primary;
 }
@@ -222,14 +222,14 @@ onUnload(() => {
   flex: 1;
 }
 .letter-title {
-  font-size: 48rpx;
+  font-size: $learnly-fs-xl;
   font-weight: 700;
   color: $learnly-text;
 }
 .letter-tip {
   display: block;
   margin: 8rpx 0 20rpx;
-  font-size: 26rpx;
+  font-size: $learnly-fs-base;
   color: $learnly-text-light;
 }
 .btn-audio {
@@ -238,7 +238,7 @@ onUnload(() => {
   line-height: 72rpx;
   background: rgba($learnly-primary, 0.12);
   color: $learnly-primary;
-  font-size: 28rpx;
+  font-size: $learnly-fs-base;
   border-radius: $learnly-radius-md;
 
   &[disabled] {
@@ -249,7 +249,7 @@ onUnload(() => {
 }
 .section {
   margin-top: 32rpx;
-  background: #fff;
+  background: $learnly-surface;
   padding: 32rpx;
   border-radius: $learnly-radius-lg;
 }
@@ -258,16 +258,16 @@ onUnload(() => {
   margin-bottom: 16rpx;
 }
 .section-label {
-  font-size: 30rpx;
+  font-size: $learnly-fs-md;
   font-weight: 700;
   color: $learnly-text;
 }
 .board-wrap {
   margin-top: 32rpx;
   padding: 24rpx;
-  background: #fff;
+  background: $learnly-surface;
   border-radius: $learnly-radius-lg;
-  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.05);
+  box-shadow: $learnly-shadow-sm;
 }
 .board-actions {
   display: flex;
@@ -281,29 +281,29 @@ onUnload(() => {
   line-height: 80rpx;
   padding: 0 40rpx;
   background: $learnly-primary;
-  color: #fff;
-  font-size: 28rpx;
+  color: $learnly-surface;
+  font-size: $learnly-fs-base;
   border-radius: $learnly-radius-md;
 
   &.ghost {
-    background: #fff;
+    background: $learnly-surface;
     color: $learnly-primary;
     border: 2rpx solid $learnly-primary;
   }
 }
 .quiz-hint {
   flex: 1;
-  font-size: 24rpx;
+  font-size: $learnly-fs-sm;
   color: $learnly-text-light;
 }
 .copybook-hint {
   display: block;
   margin-top: 16rpx;
-  font-size: 24rpx;
+  font-size: $learnly-fs-sm;
   color: $learnly-text-light;
 }
 .fallback-text {
-  font-size: 28rpx;
+  font-size: $learnly-fs-base;
   color: $learnly-text-light;
 }
 </style>

@@ -168,31 +168,31 @@ function goNext() {
   justify-content: space-between;
 }
 .progress {
-  font-size: 28rpx;
+  font-size: $learnly-fs-base;
   font-weight: 700;
   color: $learnly-text;
 }
 .range-tag {
   padding: 6rpx 24rpx;
-  background: #fff;
+  background: $learnly-surface;
   border-radius: 999rpx;
-  font-size: 24rpx;
+  font-size: $learnly-fs-sm;
   color: $learnly-primary;
 }
 .question-card {
   margin-top: 24rpx;
   padding: 56rpx 32rpx 40rpx;
-  background: #fff;
+  background: $learnly-surface;
   border-radius: $learnly-radius-lg;
-  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.05);
+  box-shadow: $learnly-shadow-sm;
   text-align: center;
   transition: background-color 0.2s ease;
 
   &.is-correct {
-    background: #e8f6ee;
+    background: $learnly-primary-soft;
   }
   &.is-wrong {
-    background: #fdecec;
+    background: $learnly-danger-soft;
   }
 }
 .question {
@@ -202,19 +202,19 @@ function goNext() {
   gap: 20rpx;
 }
 .num {
-  font-size: 88rpx;
+  font-size: $learnly-fs-hero;
   font-weight: 800;
   color: $learnly-text;
   font-variant-numeric: tabular-nums;
 }
 .op {
-  font-size: 64rpx;
+  font-size: $learnly-fs-3xl;
   font-weight: 700;
   color: $learnly-text-light;
 }
 .answer {
   min-width: 120rpx;
-  font-size: 88rpx;
+  font-size: $learnly-fs-hero;
   font-weight: 800;
   color: $learnly-text-light;
   font-variant-numeric: tabular-nums;
@@ -229,12 +229,12 @@ function goNext() {
 }
 .is-wrong .answer,
 .is-wrong .feedback.bad {
-  color: #e05252;
+  color: $learnly-danger;
 }
 .feedback {
   display: block;
   margin-top: 24rpx;
-  font-size: 26rpx;
+  font-size: $learnly-fs-base;
 
   &.hint {
     color: $learnly-text-light;
@@ -249,21 +249,21 @@ function goNext() {
   flex: 1;
   margin: 0;
   padding: 20rpx 0;
-  background: #fff;
+  background: $learnly-surface;
   border-radius: $learnly-radius-md;
-  font-size: 30rpx;
+  font-size: $learnly-fs-md;
   font-weight: 700;
   color: $learnly-text;
-  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.05);
+  box-shadow: $learnly-shadow-sm;
 
   &.primary {
     background: $learnly-primary;
-    color: #fff;
+    color: $learnly-surface;
   }
   &[disabled] {
     opacity: 0.4;
     color: $learnly-text;
-    background: #fff;
+    background: $learnly-surface;
   }
 }
 .keypad {
@@ -282,9 +282,9 @@ function goNext() {
 .key {
   margin: 0;
   padding: 24rpx 0;
-  background: #fff;
+  background: $learnly-surface;
   border-radius: $learnly-radius-md;
-  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.05);
+  box-shadow: $learnly-shadow-sm;
   font-size: 44rpx;
   font-weight: 800;
   color: $learnly-text;
@@ -294,7 +294,7 @@ function goNext() {
   }
   &.key-confirm {
     background: $learnly-primary;
-    color: #fff;
+    color: $learnly-surface;
   }
 }
 </style>

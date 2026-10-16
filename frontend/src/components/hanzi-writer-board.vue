@@ -478,12 +478,12 @@ export default {
   width: 100%;
   aspect-ratio: 1 / 1;
   /* 田字格背景：外框 + 横竖中线。 */
-  border: 3rpx solid #d1d5db;
+  border: 3rpx solid $learnly-border;
   border-radius: $learnly-radius-sm;
   background:
-    linear-gradient(to right, transparent calc(50% - 1rpx), #e5e7eb calc(50% - 1rpx), #e5e7eb calc(50% + 1rpx), transparent calc(50% + 1rpx)),
-    linear-gradient(to bottom, transparent calc(50% - 1rpx), #e5e7eb calc(50% - 1rpx), #e5e7eb calc(50% + 1rpx), transparent calc(50% + 1rpx)),
-    #fff;
+    linear-gradient(to right, transparent calc(50% - 1rpx), $learnly-border calc(50% - 1rpx), $learnly-border calc(50% + 1rpx), transparent calc(50% + 1rpx)),
+    linear-gradient(to bottom, transparent calc(50% - 1rpx), $learnly-border calc(50% - 1rpx), $learnly-border calc(50% + 1rpx), transparent calc(50% + 1rpx)),
+    $learnly-surface;
   overflow: hidden;
 }
 /* #ifdef MP-WEIXIN */
@@ -501,11 +501,11 @@ export default {
  */
 .grid-fourline {
   background:
-    linear-gradient(to bottom, transparent calc(8px + (100% - 16px) * 0.03320313 - 1rpx), #e5e7eb calc(8px + (100% - 16px) * 0.03320313 - 1rpx), #e5e7eb calc(8px + (100% - 16px) * 0.03320313 + 1rpx), transparent calc(8px + (100% - 16px) * 0.03320313 + 1rpx)),
-    linear-gradient(to bottom, transparent calc(8px + (100% - 16px) * 0.34472656 - 1rpx), #e5e7eb calc(8px + (100% - 16px) * 0.34472656 - 1rpx), #e5e7eb calc(8px + (100% - 16px) * 0.34472656 + 1rpx), transparent calc(8px + (100% - 16px) * 0.34472656 + 1rpx)),
-    linear-gradient(to bottom, transparent calc(8px + (100% - 16px) * 0.65527344 - 1rpx), #e5e7eb calc(8px + (100% - 16px) * 0.65527344 - 1rpx), #e5e7eb calc(8px + (100% - 16px) * 0.65527344 + 1rpx), transparent calc(8px + (100% - 16px) * 0.65527344 + 1rpx)),
-    linear-gradient(to bottom, transparent calc(8px + (100% - 16px) * 0.96679688 - 1rpx), #e5e7eb calc(8px + (100% - 16px) * 0.96679688 - 1rpx), #e5e7eb calc(8px + (100% - 16px) * 0.96679688 + 1rpx), transparent calc(8px + (100% - 16px) * 0.96679688 + 1rpx)),
-    #fff;
+    linear-gradient(to bottom, transparent calc(8px + (100% - 16px) * 0.03320313 - 1rpx), $learnly-border calc(8px + (100% - 16px) * 0.03320313 - 1rpx), $learnly-border calc(8px + (100% - 16px) * 0.03320313 + 1rpx), transparent calc(8px + (100% - 16px) * 0.03320313 + 1rpx)),
+    linear-gradient(to bottom, transparent calc(8px + (100% - 16px) * 0.34472656 - 1rpx), $learnly-border calc(8px + (100% - 16px) * 0.34472656 - 1rpx), $learnly-border calc(8px + (100% - 16px) * 0.34472656 + 1rpx), transparent calc(8px + (100% - 16px) * 0.34472656 + 1rpx)),
+    linear-gradient(to bottom, transparent calc(8px + (100% - 16px) * 0.65527344 - 1rpx), $learnly-border calc(8px + (100% - 16px) * 0.65527344 - 1rpx), $learnly-border calc(8px + (100% - 16px) * 0.65527344 + 1rpx), transparent calc(8px + (100% - 16px) * 0.65527344 + 1rpx)),
+    linear-gradient(to bottom, transparent calc(8px + (100% - 16px) * 0.96679688 - 1rpx), $learnly-border calc(8px + (100% - 16px) * 0.96679688 - 1rpx), $learnly-border calc(8px + (100% - 16px) * 0.96679688 + 1rpx), transparent calc(8px + (100% - 16px) * 0.96679688 + 1rpx)),
+    $learnly-surface;
 }
 .hw-host {
   width: 100%;

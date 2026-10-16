@@ -203,7 +203,7 @@ interface mpCanvasNode {
 }
 .strip-title {
   display: block;
-  font-size: 26rpx;
+  font-size: $learnly-fs-base;
   font-weight: 700;
   color: $learnly-text;
   margin-bottom: 16rpx;
@@ -224,12 +224,12 @@ interface mpCanvasNode {
   width: 100%;
   height: 0;
   padding-bottom: 100%;
-  border: 2rpx solid #d1d5db;
+  border: 2rpx solid $learnly-border;
   border-radius: $learnly-radius-sm;
   background:
-    linear-gradient(to right, transparent calc(50% - 1rpx), #e5e7eb calc(50% - 1rpx), #e5e7eb calc(50% + 1rpx), transparent calc(50% + 1rpx)),
-    linear-gradient(to bottom, transparent calc(50% - 1rpx), #e5e7eb calc(50% - 1rpx), #e5e7eb calc(50% + 1rpx), transparent calc(50% + 1rpx)),
-    #fff;
+    linear-gradient(to right, transparent calc(50% - 1rpx), $learnly-border calc(50% - 1rpx), $learnly-border calc(50% + 1rpx), transparent calc(50% + 1rpx)),
+    linear-gradient(to bottom, transparent calc(50% - 1rpx), $learnly-border calc(50% - 1rpx), $learnly-border calc(50% + 1rpx), transparent calc(50% + 1rpx)),
+    $learnly-surface;
   overflow: hidden;
 }
 .cell-canvas {
@@ -247,7 +247,7 @@ interface mpCanvasNode {
 .cell-label {
   display: block;
   text-align: center;
-  font-size: 22rpx;
+  font-size: $learnly-fs-sm;
   color: $learnly-text-light;
   margin-top: 6rpx;
 }

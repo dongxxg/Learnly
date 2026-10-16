@@ -73,22 +73,23 @@ function goDetail(id: string) {
   gap: 8rpx;
   padding: 12rpx 28rpx;
   border-radius: 999rpx;
-  background: #fff;
-  font-size: 26rpx;
+  background: $learnly-surface;
+  font-size: $learnly-fs-base;
   color: $learnly-text-light;
-  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
+  box-shadow: $learnly-shadow-sm;
 
   &.active {
     background: $learnly-primary;
-    color: #fff;
+    color: $learnly-surface;
 
     .tab-count {
-      color: rgba(255, 255, 255, 0.75);
+      color: $learnly-surface;
+      opacity: 0.75;
     }
   }
 }
 .tab-count {
-  font-size: 20rpx;
+  font-size: $learnly-fs-xs;
   color: $learnly-text-light;
 }
 .poem-list {
@@ -97,9 +98,9 @@ function goDetail(id: string) {
   gap: 20rpx;
 }
 .poem-card {
-  background: #fff;
+  background: $learnly-surface;
   border-radius: $learnly-radius-lg;
-  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.05);
+  box-shadow: $learnly-shadow-sm;
   padding: 32rpx;
 }
 .poem-head {
@@ -114,13 +115,13 @@ function goDetail(id: string) {
   color: $learnly-text;
 }
 .poem-author {
-  font-size: 24rpx;
+  font-size: $learnly-fs-sm;
   color: $learnly-primary;
 }
 .poem-preview {
   display: block;
   margin-top: 12rpx;
-  font-size: 26rpx;
+  font-size: $learnly-fs-base;
   color: $learnly-text-light;
 }
 </style>

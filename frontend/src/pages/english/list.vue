@@ -79,15 +79,15 @@ function goDetail(letter: string) {
   text-align: center;
   padding: 12rpx 20rpx;
   margin-right: 16rpx;
-  background: #fff;
+  background: $learnly-surface;
   border-radius: 999rpx;
-  font-size: 28rpx;
+  font-size: $learnly-fs-base;
   font-weight: 700;
   color: $learnly-text-light;
 
   &.active {
     background: $learnly-primary;
-    color: #fff;
+    color: $learnly-surface;
   }
 }
 .grid-scroll {
@@ -105,10 +105,10 @@ function goDetail(letter: string) {
   flex-direction: column;
   align-items: center;
   padding: 28rpx 0 20rpx;
-  background: #fff;
+  background: $learnly-surface;
   border: 4rpx solid transparent;
   border-radius: $learnly-radius-lg;
-  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.05);
+  box-shadow: $learnly-shadow-sm;
 
   &.focused {
     border-color: $learnly-primary;
@@ -124,17 +124,17 @@ function goDetail(letter: string) {
   line-height: 1.2;
 
   &.upper {
-    font-size: 88rpx;
+    font-size: $learnly-fs-hero;
     color: $learnly-primary;
   }
   &.lower {
-    font-size: 64rpx;
+    font-size: $learnly-fs-3xl;
     color: $learnly-text;
   }
 }
 .letter-name {
   margin-top: 8rpx;
-  font-size: 24rpx;
+  font-size: $learnly-fs-sm;
   color: $learnly-text-light;
 }
 </style>

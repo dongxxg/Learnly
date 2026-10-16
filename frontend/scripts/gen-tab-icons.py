@@ -1,88 +1,68 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""生成 tabBar 图标（81×81 PNG，灰/萌芽绿双态，透明底）。
+"""TabBar PNG 图标重绘（ui-polish 3.1）：SVG 矢量 → Edge headless 栅格化 81×81 PNG。
 
-零第三方依赖：手写 RGBA 像素缓冲 + zlib 打包 PNG（4x 超采样抗锯齿）。
-用法：python scripts/gen-tab-icons.py
-产物：src/static/tab/{home,profile}{,-active}.png
+零第三方依赖：图标定义为与 src/components/ui/icons.ts 同源的线性风格路径，
+经 Edge --headless --screenshot 栅格化。改色/改形后重跑本脚本即可再生成。
+用法：python scripts/gen-tab-icons.py [--out ../src/static/tab]
 """
-import math
-import struct
-import zlib
-from pathlib import Path
 
-SIZE = 81
-SS = 4  # 超采样倍数
-GRAY = (0x9C, 0xA3, 0xAF)   # $learnly-text-light
-GREEN = (0x4C, 0xAF, 0x7A)  # $learnly-primary
+import argparse
+import pathlib
+import subprocess
+import tempfile
+import time
 
-OUT_DIR = Path(__file__).resolve().parent.parent / "src" / "static" / "tab"
+EDGE = r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
+SIZE = 81  # 与现有 tabBar 图标规格一致
 
+# 与 icons.ts 同源的线性风格路径（24×24 viewBox，stroke=2）
+ICONS = {
+    "home": '<path d="M3 9.5 12 3l9 6.5"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/>',
+    "profile": '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5"/>',
+}
+COLORS = {
+    "": "#9CA3AF",  # 未选中：$learnly-text-light
+    "-active": "#4CAF7A",  # 选中：$learnly-primary
+}
 
-def in_home(nx: float, ny: float) -> bool:
-    """房子：屋顶三角 + 屋身方 + 门洞。坐标归一化到 [0,1]。"""
-    # 屋顶：顶点 (0.5, 0.10) 底边 y=0.46 宽 [0.08, 0.92]
-    if 0.10 <= ny <= 0.46:
-        half = (ny - 0.10) / (0.46 - 0.10) * 0.42
-        if abs(nx - 0.5) <= half:
-            return True
-    # 屋身：y [0.46, 0.90] x [0.16, 0.84]，门洞 x [0.42, 0.58] y [0.62, 0.90]
-    if 0.46 <= ny <= 0.90 and 0.16 <= nx <= 0.84:
-        if 0.42 <= nx <= 0.58 and 0.62 <= ny <= 0.90:
-            return False
-        return True
-    return False
-
-
-def in_profile(nx: float, ny: float) -> bool:
-    """人形：头圆 + 肩弧。"""
-    # 头：圆心 (0.5, 0.30) 半径 0.16
-    if (nx - 0.5) ** 2 + (ny - 0.30) ** 2 <= 0.16 ** 2:
-        return True
-    # 肩：椭圆心 (0.5, 0.86) 半轴 (0.30, 0.26)，截 y <= 0.86
-    if ny <= 0.86 and ((nx - 0.5) / 0.30) ** 2 + ((ny - 0.86) / 0.26) ** 2 <= 1.0:
-        return True
-    return False
-
-
-def render(shape, rgb) -> bytes:
-    """4x 超采样渲染 → RGBA 像素行（PNG scanline 格式，带 filter 字节）。"""
-    rows = []
-    for py in range(SIZE):
-        row = bytearray([0])  # filter type 0
-        for px in range(SIZE):
-            hit = 0
-            for oy in range(SS):
-                for ox in range(SS):
-                    nx = (px * SS + ox + 0.5) / (SIZE * SS)
-                    ny = (py * SS + oy + 0.5) / (SIZE * SS)
-                    if shape(nx, ny):
-                        hit += 1
-            alpha = round(255 * hit / (SS * SS))
-            row.extend(rgb + (alpha,))
-        rows.append(bytes(row))
-    return b"".join(rows)
-
-
-def write_png(path: Path, raw: bytes) -> None:
-    def chunk(tag: bytes, data: bytes) -> bytes:
-        body = tag + data
-        return struct.pack(">I", len(data)) + body + struct.pack(">I", zlib.crc32(body))
-
-    ihdr = struct.pack(">IIBBBBB", SIZE, SIZE, 8, 6, 0, 0, 0)  # 8bit RGBA
-    png = (b"\x89PNG\r\n\x1a\n"
-           + chunk(b"IHDR", ihdr)
-           + chunk(b"IDAT", zlib.compress(raw, 9))
-           + chunk(b"IEND", b""))
-    path.write_bytes(png)
+HTML = """<!doctype html><html><head><meta charset="utf-8"><style>
+html,body{{margin:0;padding:0;background:#FFFFFF}}
+svg{{display:block;width:{size}px;height:{size}px}}
+</style></head><body>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+ stroke="{color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">{body}</svg>
+</body></html>"""
 
 
 def main() -> None:
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
-    for name, shape in (("home", in_home), ("profile", in_profile)):
-        for suffix, rgb in (("", GRAY), ("-active", GREEN)):
-            write_png(OUT_DIR / f"{name}{suffix}.png", render(shape, rgb))
-            print(f"[tab-icons] {name}{suffix}.png")
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--out", default=str(pathlib.Path(__file__).parent / ".." / "src" / "static" / "tab"))
+    args = ap.parse_args()
+    out_dir = pathlib.Path(args.out).resolve()
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    for name, body in ICONS.items():
+        for suffix, color in COLORS.items():
+            html = HTML.format(size=SIZE, color=color, body=body)
+            with tempfile.NamedTemporaryFile("w", suffix=".html", delete=False, encoding="utf-8") as f:
+                f.write(html)
+                tmp = pathlib.Path(f.name)
+            png = out_dir / f"{name}{suffix}.png"
+            png.unlink(missing_ok=True)  # 先删：Edge 截图失败静默，靠"文件未重建"暴露
+            with tempfile.TemporaryDirectory(prefix="edge-tab-profile") as profile:
+                subprocess.run(  # msedge 是 GUI 程序，立即返回；靠轮询等落盘
+                    [EDGE, "--headless", "--disable-gpu", f"--user-data-dir={profile}",
+                     f"--screenshot={png}", f"--window-size={SIZE},{SIZE}", tmp.as_uri()],
+                    capture_output=True, text=True, timeout=60,
+                )
+            for _ in range(50):  # 最多等 10s
+                if png.exists():
+                    break
+                time.sleep(0.2)
+            tmp.unlink(missing_ok=True)
+            if not png.exists():
+                raise SystemExit(f"[gen-tab-icons] FAILED {png.name}: Edge 未产出截图 {result.stderr[:200]}")
+            print(f"[gen-tab-icons] OK {png.name} ({png.stat().st_size}B)")
 
 
 if __name__ == "__main__":
