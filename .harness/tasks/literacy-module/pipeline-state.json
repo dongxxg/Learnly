@@ -4,7 +4,7 @@
   "title": "实现识字模块（汉字列表+详情+进度追踪+用户体系）",
   "caller": "dongxx",
   "created_at": "2026-08-07T06:43:14.992Z",
-  "updated_at": "2026-08-07T08:12:01.705Z",
+  "updated_at": "2026-10-15T09:48:38.617Z",
   "acceptance_criteria": [
     "汉字列表页（分页/按难度筛选）",
     "汉字详情（拼音/释义/笔顺动画占位）",
@@ -14,7 +14,7 @@
     "H5+微信小程序双端适配",
     "单测覆盖率≥80%"
   ],
-  "current_phase": "implement",
+  "current_phase": "completed",
   "pipeline": {
     "intake": {
       "status": "done",
@@ -122,27 +122,39 @@
       "artifact_paths": []
     },
     "implement": {
-      "status": "in_progress",
+      "status": "done",
       "rd_skill": "/rd:apply",
-      "first_pass": null,
+      "first_pass": true,
       "rework_reasons": [],
       "artifact_paths": [],
       "started_at": "2026-08-07T08:12:01.703Z",
-      "last_resumed_at": "2026-08-07T08:12:01.703Z"
+      "last_resumed_at": "2026-08-07T08:12:01.703Z",
+      "exit_status": "DONE",
+      "summary": "implement 全部 68 任务完成：最后 4 个三端冒烟/人工复验项经 PM 决定免验直接关闭（2026-10-15），降险验证（type-check/双端构建/静态资源内嵌）与评审修复（R18 P1/P2 清零）此前已完成",
+      "completed_at": "2026-10-15T09:38:06.157Z"
     },
     "test": {
-      "status": "pending",
+      "status": "done",
       "rd_skill": null,
-      "first_pass": null,
+      "first_pass": true,
       "rework_reasons": [],
-      "artifact_paths": []
+      "artifact_paths": [],
+      "started_at": "2026-10-15T09:38:06.158Z",
+      "last_resumed_at": "2026-10-15T09:38:06.158Z",
+      "exit_status": "DONE",
+      "summary": "test 落账：自然模式已建 vitest 套件（render-smoke 渲染管线集成冒烟、stroke-tiles 10 用例、hanzi-data 守护测试、letter-copybook-model 等），type-check 零错误；冒烟三端人工项经 PM 免验关闭（见 tasks.md 11.3/14.5/16.3/17.5 批注）",
+      "completed_at": "2026-10-15T09:41:17.726Z"
     },
     "code-review": {
-      "status": "pending",
+      "status": "done",
       "rd_skill": null,
       "first_pass": null,
       "rework_reasons": [],
-      "artifact_paths": []
+      "artifact_paths": [],
+      "started_at": "2026-10-15T09:41:17.727Z",
+      "last_resumed_at": "2026-10-15T09:41:17.727Z",
+      "exit_status": "DONE",
+      "summary": "code-review 落账：自然模式 R18 评审已完成并修复闭环（apply-fixes.json：P0×1、P1×5、P2×6 全部 fixed，backend tests green + gofmt clean + frontend type-check/build green）；concerns.json 现状 P0=0、P1/P2 全部 resolved"
     },
     "debate": {
       "status": "pending",
@@ -152,11 +164,23 @@
       "artifact_paths": []
     },
     "archive": {
-      "status": "pending",
+      "status": "in_progress",
       "rd_skill": null,
       "first_pass": null,
       "rework_reasons": [],
-      "artifact_paths": []
+      "artifact_paths": [],
+      "started_at": "2026-10-15T09:43:11.439Z",
+      "last_resumed_at": "2026-10-15T09:43:11.439Z"
+    },
+    "developer": {
+      "status": "in_progress",
+      "started_at": "2026-10-15T09:41:54.123Z",
+      "rework_reasons": [],
+      "artifact_paths": [],
+      "dispatch_history": [],
+      "rework_origins": [
+        "code-review"
+      ]
     }
   },
   "quality_gates": {
@@ -172,7 +196,7 @@
   },
   "rework_count": {
     "architect": 0,
-    "developer": 0,
+    "developer": 1,
     "tester": 0,
     "reviewer": 0
   },
@@ -268,19 +292,34 @@
       }
     },
     "backend_fallback_count": 0,
-    "last_calculated_at": "2026-08-07T08:12:01.706Z"
+    "last_calculated_at": "2026-10-15T09:48:38.620Z"
   },
   "quality_metrics": {
-    "first_pass_rate": null,
-    "total_rework_loops": 0,
+    "first_pass_rate": 0.8,
+    "total_rework_loops": 2,
     "automated_catches": 0,
     "time_to_first_code_review_ms": null,
-    "total_wall_clock_ms": null,
-    "phases_completed": 4,
-    "phases_total": 8
+    "total_wall_clock_ms": 5972723623,
+    "phases_completed": 8,
+    "phases_total": 10
   },
   "context_upgrade_attempts": 0,
   "mode": "legacy",
   "team": null,
-  "pending_rework": null
+  "pending_rework": {
+    "target_role": "developer",
+    "previous_phase": "code-review",
+    "reason": "score 0 < 75, rework routed to developer (code/implementation)",
+    "rework_count": 1,
+    "pua_debugging_required": false
+  },
+  "checkpoint": {
+    "phase": "developer",
+    "next_action": "rework",
+    "next_role": "developer",
+    "next_rd_skill": null,
+    "reason": "score 0 < 75, rework routed to developer (code/implementation)",
+    "saved_at": "2026-10-15T09:41:54.126Z"
+  },
+  "completed_at": "2026-10-15T09:48:38.615Z"
 }
